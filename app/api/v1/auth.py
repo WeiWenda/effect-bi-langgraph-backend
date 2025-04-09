@@ -228,11 +228,11 @@ async def login(
 
 
 @router.post("/session", response_model=SessionResponse)
-async def create_session(user_id: int = Depends(get_current_user)):
+async def create_session(user: User = Depends(get_current_user)):
     """Create a new chat session for the authenticated user.
 
     Args:
-        user_id: The authenticated user's ID
+        user: The authenticated user
 
     Returns:
         SessionResponse: The session ID, name, and access token
@@ -242,7 +242,7 @@ async def create_session(user_id: int = Depends(get_current_user)):
         session_id = str(uuid.uuid4())
 
         # Create session in database
-        session = await db_service.create_session(session_id, user_id)
+        session = await db_service.create_session(session_id, user.id)
 
         # Create access token for the session
         token = create_access_token(session_id)
@@ -250,14 +250,14 @@ async def create_session(user_id: int = Depends(get_current_user)):
         logger.info(
             "session_created",
             session_id=session_id,
-            user_id=user_id,
+            user_id=user.id,
             name=session.name,
             expires_at=token.expires_at.isoformat(),
         )
 
         return SessionResponse(session_id=session_id, name=session.name, token=token)
     except ValueError as ve:
-        logger.error("session_creation_validation_failed", error=str(ve), user_id=user_id, exc_info=True)
+        logger.error("session_creation_validation_failed", error=str(ve), user_id=user.id, exc_info=True)
         raise HTTPException(status_code=422, detail=str(ve))
 
 
