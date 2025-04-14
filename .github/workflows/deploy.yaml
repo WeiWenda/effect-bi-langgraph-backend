@@ -21,10 +21,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y make
 
+      - name: Sanitize repository name
+        id: sanitize
+        run: |
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')
+          echo "REPO_NAME=${REPO_NAME}" >> $GITHUB_ENV
+
       - name: Build Image
         run: |
           make docker-build-env ENV=production
-          docker tag fastapi-langgraph-template:production ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:production
+          docker tag fastapi-langgraph-template:production ${{ secrets.DOCKER_USERNAME }}/${{ env.REPO_NAME }}:production
 
       - name: Log in to Docker Hub
         run: |
@@ -32,7 +38,7 @@ jobs:
 
       - name: Push Image
         run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:production
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.REPO_NAME }}:production
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
