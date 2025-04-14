@@ -24,7 +24,7 @@ jobs:
       - name: Sanitize repository name
         id: sanitize
         run: |
-          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | sed 's/^\///' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')
           echo "REPO_NAME=${REPO_NAME}" >> $GITHUB_ENV
 
       - name: Build Image
