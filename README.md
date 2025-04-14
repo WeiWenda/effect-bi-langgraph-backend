@@ -5,6 +5,7 @@ A production-ready FastAPI template for building AI agent applications with Lang
 ## 🌟 Features
 
 - **Production-Ready Architecture**
+
   - FastAPI for high-performance async API endpoints
   - LangGraph integration for AI agent workflows
   - Langfuse for LLM observability and monitoring
@@ -15,6 +16,7 @@ A production-ready FastAPI template for building AI agent applications with Lang
   - Prometheus metrics and Grafana dashboards for monitoring
 
 - **Security**
+
   - JWT-based authentication
   - Session management
   - Input sanitization
@@ -22,6 +24,7 @@ A production-ready FastAPI template for building AI agent applications with Lang
   - Rate limiting protection
 
 - **Developer Experience**
+
   - Environment-specific configuration
   - Comprehensive logging system
   - Clear project structure
@@ -40,44 +43,61 @@ A production-ready FastAPI template for building AI agent applications with Lang
 ### Prerequisites
 
 - Python 3.13+
-- PostgreSQL
+- PostgreSQL ([see Database setup](#database-setup))
 - Docker and Docker Compose (optional)
 
 ### Environment Setup
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd <project-directory>
 ```
 
 2. Create and activate a virtual environment:
+
 ```bash
 uv sync
 ```
 
 3. Copy the example environment file:
+
 ```bash
 cp .env.example .env.[development|staging|production] # e.g. .env.development
 ```
 
 4. Update the `.env` file with your configuration (see `.env.example` for reference)
 
+### Database setup
+
+1. Create a PostgreSQL database (e.g Supabase or local PostgreSQL)
+2. Update the database connection string in your `.env` file:
+
+```bash
+POSTGRES_URL="postgresql://:your-db-password@POSTGRES_HOST:POSTGRES_PORT/POSTGRES_DB"
+```
+
+- You don't have to create the tables manually, the ORM will handle that for you.But if you faced any issues,please run the `schemas.sql` file to create the tables manually.
+
 ### Running the Application
 
 #### Local Development
 
 1. Install dependencies:
+
 ```bash
 uv sync
 ```
 
 2. Run the application:
+
 ```bash
 make [dev|staging|production] # e.g. make dev
 ```
 
 1. Go to Swagger UI:
+
 ```bash
 http://localhost:8000/docs
 ```
@@ -85,12 +105,14 @@ http://localhost:8000/docs
 #### Using Docker
 
 1. Build and run with Docker Compose:
+
 ```bash
 make docker-build-env ENV=[development|staging|production] # e.g. make docker-build-env ENV=development
 make docker-run-env ENV=[development|staging|production] # e.g. make docker-run-env ENV=development
 ```
 
 2. Access the monitoring stack:
+
 ```bash
 # Prometheus metrics
 http://localhost:9090
@@ -103,6 +125,7 @@ Default credentials:
 ```
 
 The Docker setup includes:
+
 - FastAPI application
 - PostgreSQL database
 - Prometheus for metrics collection
@@ -159,6 +182,7 @@ evals/reports/evaluation_report_YYYYMMDD_HHMMSS.json
 ```
 
 Each report includes:
+
 - High-level statistics (total trace count, success rate, etc.)
 - Per-metric performance metrics
 - Detailed trace-level information for debugging
@@ -168,4 +192,4 @@ Each report includes:
 The application uses a flexible configuration system with environment-specific settings:
 
 - `.env.development`
-- 
+-
