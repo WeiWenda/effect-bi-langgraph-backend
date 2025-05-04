@@ -6,10 +6,11 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115.12",
-    "langchain>=0.3.22",
-    "langchain-openai>=0.3.11",
+    "langchain>=0.3.25",
+    "langchain-core>=0.3.58",
+    "langchain-openai>=0.3.16",
     "langfuse>=2.60.2",
-    "langgraph>=0.3.21",
+    "langgraph>=0.4.1",
     "langgraph-checkpoint-postgres>=2.0.19",
     "passlib[bcrypt]>=1.7.4",
     "psycopg2-binary>=2.9.10",
