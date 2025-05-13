@@ -25,7 +25,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import StateSnapshot
 from openai import OpenAIError
 from psycopg_pool import AsyncConnectionPool
-
+from app.core.metrics import llm_inference_duration_seconds 
 from app.core.config import (
     Environment,
     settings,
@@ -136,7 +136,8 @@ class LangGraphAgent:
 
         for attempt in range(max_retries):
             try:
-                generated_state = {"messages": [await self.llm.ainvoke(dump_messages(messages))]}
+                with llm_inference_duration_seconds.labels(model=self.llm.model_name).time():
+                    generated_state = {"messages": [await self.llm.ainvoke(dump_messages(messages))]}
                 logger.info(
                     "llm_response_generated",
                     session_id=state.session_id,
