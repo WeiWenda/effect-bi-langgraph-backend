@@ -114,7 +114,7 @@ class Evaluator:
             score: The evaluation score.
             metric: The metric used for evaluation.
         """
-        self.langfuse.score(
+        self.langfuse.create_score(
             trace_id=trace.id,
             name=metric["name"],
             data_type="NUMERIC",
@@ -187,7 +187,9 @@ class Evaluator:
         """
         last_24_hours = datetime.now() - timedelta(hours=24)
         try:
-            traces = self.langfuse.fetch_traces(from_timestamp=last_24_hours, order_by="timestamp.asc", limit=100).data
+            traces = self.langfuse.api.trace.list(
+                from_timestamp=last_24_hours, order_by="timestamp.asc", limit=100
+            ).data
             traces_without_scores = [trace for trace in traces if not trace.scores]
             return traces_without_scores
         except Exception as e:

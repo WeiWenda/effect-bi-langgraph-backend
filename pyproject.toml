@@ -9,7 +9,7 @@ dependencies = [
     "langchain>=0.3.25",
     "langchain-core>=0.3.58",
     "langchain-openai>=0.3.16",
-    "langfuse>=2.60.2",
+    "langfuse==3.0.3",
     "langgraph>=0.4.1",
     "langgraph-checkpoint-postgres>=2.0.19",
     "passlib[bcrypt]>=1.7.4",
@@ -36,19 +36,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "black",
-    "isort",
-    "flake8",
-    "ruff",
-    "djlint==1.36.4",
-]
+dev = ["black", "isort", "flake8", "ruff", "djlint==1.36.4"]
 
 [dependency-groups]
-test = [
-    "httpx>=0.28.1",
-    "pytest>=8.3.5",
-]
+test = ["httpx>=0.28.1", "pytest>=8.3.5"]
 
 
 [tool.pytest.ini_options]
@@ -97,7 +88,7 @@ exclude = ["migrations", "*.ipynb", "venv"]
 # Enable flake8-bugbear (`B`) rules and docstring (`D`) rules
 select = ["E", "F", "B", "ERA", "D"]
 # Never enforce `E501` (line length violations).
-ignore = ["E501", "F401", "D203", "D213","B904","B008"]
+ignore = ["E501", "F401", "D203", "D213", "B904", "B008"]
 # Avoid trying to fix flake8-bugbear (`B`) violations.
 unfixable = ["B"]
 
@@ -107,4 +98,3 @@ convention = "google"
 # Ignore `E402` (import violations) in all `__init__.py` files
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402"]
-

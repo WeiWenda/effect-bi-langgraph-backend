@@ -15,7 +15,7 @@ from langchain_core.messages import (
     convert_to_openai_messages,
 )
 from langchain_openai import ChatOpenAI
-from langfuse.callback import CallbackHandler
+from langfuse.langchain import CallbackHandler
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import (
     END,
@@ -25,13 +25,14 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import StateSnapshot
 from openai import OpenAIError
 from psycopg_pool import AsyncConnectionPool
-from app.core.metrics import llm_inference_duration_seconds 
+
 from app.core.config import (
     Environment,
     settings,
 )
 from app.core.langgraph.tools import tools
 from app.core.logging import logger
+from app.core.metrics import llm_inference_duration_seconds
 from app.core.prompts import SYSTEM_PROMPT
 from app.schemas import (
     GraphState,
