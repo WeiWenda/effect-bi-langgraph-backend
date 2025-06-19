@@ -297,6 +297,35 @@ async def update_session_name(
         raise HTTPException(status_code=422, detail=str(ve))
 
 
+@router.delete("/session/{session_id}")
+async def delete_session(session_id: str, current_session: Session = Depends(get_current_session)):
+    """Delete a session for the authenticated user.
+
+    Args:
+        session_id: The ID of the session to delete
+        current_session: The current session from auth
+
+    Returns:
+        None
+    """
+    try:
+        # Sanitize inputs
+        sanitized_session_id = sanitize_string(session_id)
+        sanitized_current_session = sanitize_string(current_session.id)
+
+        # Verify the session ID matches the authenticated session
+        if sanitized_session_id != sanitized_current_session:
+            raise HTTPException(status_code=403, detail="Cannot delete other sessions")
+
+        # Delete the session
+        await db_service.delete_session(sanitized_session_id)
+
+        logger.info("session_deleted", session_id=session_id, user_id=current_session.user_id)
+    except ValueError as ve:
+        logger.error("session_deletion_validation_failed", error=str(ve), session_id=session_id, exc_info=True)
+        raise HTTPException(status_code=422, detail=str(ve))
+
+
 @router.get("/sessions", response_model=List[SessionResponse])
 async def get_user_sessions(user: User = Depends(get_current_user)):
     """Get all session IDs for the authenticated user.
