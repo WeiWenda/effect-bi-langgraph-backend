@@ -281,14 +281,13 @@ class LangGraphAgent:
             self._graph = await self.create_graph()
         config = {
             "configurable": {"thread_id": session_id},
-            "callbacks": [
-                CallbackHandler(
-                    environment=settings.ENVIRONMENT.value,
-                    debug=False,
-                    user_id=user_id,
-                    session_id=session_id,
-                )
-            ],
+            "callbacks": [CallbackHandler()],
+            "metadata": {
+                "user_id": user_id,
+                "session_id": session_id,
+                "environment": settings.ENVIRONMENT.value,
+                "debug": False,
+            },
         }
         try:
             response = await self._graph.ainvoke(
