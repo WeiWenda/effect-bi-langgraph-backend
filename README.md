@@ -72,10 +72,14 @@ cp .env.example .env.[development|staging|production] # e.g. .env.development
 ### Database setup
 
 1. Create a PostgreSQL database (e.g Supabase or local PostgreSQL)
-2. Update the database connection string in your `.env` file:
+2. Update the database connection settings in your `.env` file:
 
 ```bash
-POSTGRES_URL="postgresql://:your-db-password@POSTGRES_HOST:POSTGRES_PORT/POSTGRES_DB"
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
+POSTGRES_DB=cool_db
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
 ```
 
 - You don't have to create the tables manually, the ORM will handle that for you.But if you faced any issues,please run the `schemas.sql` file to create the tables manually.
