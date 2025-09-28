@@ -7,6 +7,7 @@ from typing import (
     Literal,
     Optional,
 )
+from urllib.parse import quote_plus
 
 from asgiref.sync import sync_to_async
 from langchain_core.messages import (
@@ -99,7 +100,8 @@ class LangGraphAgent:
                 max_size = settings.POSTGRES_POOL_SIZE
 
                 connection_url = (
-                    f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+                    "postgresql://"
+                    f"{quote_plus(settings.POSTGRES_USER)}:{quote_plus(settings.POSTGRES_PASSWORD)}"
                     f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
                 )
 
