@@ -150,7 +150,7 @@ docker-compose-down:
 		echo "Environment file $$ENV_FILE not found. Please create it."; \
 		exit 1; \
 	fi; \
-	APP_ENV=$(ENV) $(DOCKER_COMPOSE) down
+	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE down
 
 docker-compose-logs:
 	@if [ -z "$(ENV)" ]; then \
@@ -162,7 +162,7 @@ docker-compose-logs:
 		echo "Environment file $$ENV_FILE not found. Please create it."; \
 		exit 1; \
 	fi; \
-	APP_ENV=$(ENV) $(DOCKER_COMPOSE) logs -f
+	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE logs -f
 
 # Help
 help:

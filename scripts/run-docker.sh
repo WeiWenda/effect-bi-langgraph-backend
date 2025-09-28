@@ -31,6 +31,8 @@ else
   echo "Warning: $ENV_FILE not found. Relying on existing environment variables."
 fi
 
+cd "$PROJECT_ROOT"
+
 if [ -f "$ENV_FILE" ]; then
   echo "Running docker compose with env file $ENV_FILE"
   APP_ENV=$ENV docker compose --env-file "$ENV_FILE" up -d --build db app

@@ -4,10 +4,10 @@ set -e
 # Print initial environment values (before loading .env)
 echo "Starting with these environment variables:"
 echo "APP_ENV: ${APP_ENV:-development}"
-echo "Initial Database Host: ${POSTGRES_HOST:-${DB_HOST:-Not set}}"
-echo "Initial Database Port: ${POSTGRES_PORT:-${DB_PORT:-Not set}}"
-echo "Initial Database Name: ${POSTGRES_DB:-${DB_NAME:-Not set}}"
-echo "Initial Database User: ${POSTGRES_USER:-${DB_USER:-Not set}}"
+echo "Initial Database Host: $( [[ -n ${POSTGRES_HOST:-${DB_HOST:-}} ]] && echo 'set' || echo 'Not set' )"
+echo "Initial Database Port: $( [[ -n ${POSTGRES_PORT:-${DB_PORT:-}} ]] && echo 'set' || echo 'Not set' )"
+echo "Initial Database Name: $( [[ -n ${POSTGRES_DB:-${DB_NAME:-}} ]] && echo 'set' || echo 'Not set' )"
+echo "Initial Database User: $( [[ -n ${POSTGRES_USER:-${DB_USER:-}} ]] && echo 'set' || echo 'Not set' )"
 
 # Load environment variables from the appropriate .env file
 if [ -f ".env.${APP_ENV}" ]; then
@@ -71,10 +71,10 @@ fi
 echo -e "\nFinal environment configuration:"
 echo "Environment: ${APP_ENV:-development}"
 
-echo "Database Host: ${POSTGRES_HOST:-${DB_HOST:-Not set}}"
-echo "Database Port: ${POSTGRES_PORT:-${DB_PORT:-Not set}}"
-echo "Database Name: ${POSTGRES_DB:-${DB_NAME:-Not set}}"
-echo "Database User: ${POSTGRES_USER:-${DB_USER:-Not set}}"
+echo "Database Host: $( [[ -n ${POSTGRES_HOST:-${DB_HOST:-}} ]] && echo 'set' || echo 'Not set' )"
+echo "Database Port: $( [[ -n ${POSTGRES_PORT:-${DB_PORT:-}} ]] && echo 'set' || echo 'Not set' )"
+echo "Database Name: $( [[ -n ${POSTGRES_DB:-${DB_NAME:-}} ]] && echo 'set' || echo 'Not set' )"
+echo "Database User: $( [[ -n ${POSTGRES_USER:-${DB_USER:-}} ]] && echo 'set' || echo 'Not set' )"
 
 echo "LLM Model: ${LLM_MODEL:-Not set}"
 echo "Debug Mode: ${DEBUG:-false}"
