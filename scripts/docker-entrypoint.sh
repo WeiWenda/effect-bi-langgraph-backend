@@ -4,12 +4,10 @@ set -e
 # Print initial environment values (before loading .env)
 echo "Starting with these environment variables:"
 echo "APP_ENV: ${APP_ENV:-development}"
-if [[ -n "$POSTGRES_URL" && "$POSTGRES_URL" == *"@"* ]]; then
-    INITIAL_DB_DISPLAY=$(echo "$POSTGRES_URL" | sed 's/.*@/@/')
-    echo "Initial Database URL: *********$INITIAL_DB_DISPLAY"
-else
-    echo "Initial Database URL: ${POSTGRES_URL:-Not set}"
-fi
+echo "Initial Database Host: ${POSTGRES_HOST:-${DB_HOST:-Not set}}"
+echo "Initial Database Port: ${POSTGRES_PORT:-${DB_PORT:-Not set}}"
+echo "Initial Database Name: ${POSTGRES_DB:-${DB_NAME:-Not set}}"
+echo "Initial Database User: ${POSTGRES_USER:-${DB_USER:-Not set}}"
 
 # Load environment variables from the appropriate .env file
 if [ -f ".env.${APP_ENV}" ]; then
@@ -73,13 +71,10 @@ fi
 echo -e "\nFinal environment configuration:"
 echo "Environment: ${APP_ENV:-development}"
 
-# Show only the part after @ for database URL (for security)
-if [[ -n "$POSTGRES_URL" && "$POSTGRES_URL" == *"@"* ]]; then
-    DB_DISPLAY=$(echo "$POSTGRES_URL" | sed 's/.*@/@/')
-    echo "Database URL: *********$DB_DISPLAY"
-else
-    echo "Database URL: ${POSTGRES_URL:-Not set}"
-fi
+echo "Database Host: ${POSTGRES_HOST:-${DB_HOST:-Not set}}"
+echo "Database Port: ${POSTGRES_PORT:-${DB_PORT:-Not set}}"
+echo "Database Name: ${POSTGRES_DB:-${DB_NAME:-Not set}}"
+echo "Database User: ${POSTGRES_USER:-${DB_USER:-Not set}}"
 
 echo "LLM Model: ${LLM_MODEL:-Not set}"
 echo "Debug Mode: ${DEBUG:-false}"

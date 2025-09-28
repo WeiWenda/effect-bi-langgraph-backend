@@ -2,6 +2,8 @@ install:
 	pip install uv
 	uv sync
 
+DOCKER_COMPOSE ?= docker-compose
+
 set-env:
 	@if [ -z "$(ENV)" ]; then \
 		echo "ENV is not set. Usage: make set-env ENV=development|staging|production"; \
@@ -65,7 +67,12 @@ docker-build-env:
 	@./scripts/build-docker.sh $(ENV)
 
 docker-run:
-	docker run -p 8000:8000 fastapi-langgraph-template
+	@ENV_FILE=.env.development; \
+	if [ ! -f $$ENV_FILE ]; then \
+		echo "Environment file $$ENV_FILE not found. Please create it."; \
+		exit 1; \
+	fi; \
+	APP_ENV=development $(DOCKER_COMPOSE) --env-file $$ENV_FILE up -d --build db app
 
 docker-run-env:
 	@if [ -z "$(ENV)" ]; then \
@@ -76,7 +83,13 @@ docker-run-env:
 		echo "ENV is not valid. Must be one of: development, staging, production"; \
 		exit 1; \
 	fi
-	@./scripts/run-docker.sh $(ENV)
+	@ENV_FILE=.env.$(ENV); \
+	if [ ! -f $$ENV_FILE ]; then \
+		echo "Environment file $$ENV_FILE not found. Please create it."; \
+		exit 1; \
+	fi; \
+	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE up -d --build db app
+	# @./scripts/ensure-db-user.sh $(ENV)
 
 docker-logs:
 	@if [ -z "$(ENV)" ]; then \
@@ -87,7 +100,12 @@ docker-logs:
 		echo "ENV is not valid. Must be one of: development, staging, production"; \
 		exit 1; \
 	fi
-	@./scripts/logs-docker.sh $(ENV)
+	@ENV_FILE=.env.$(ENV); \
+	if [ ! -f $$ENV_FILE ]; then \
+		echo "Environment file $$ENV_FILE not found. Please create it."; \
+		exit 1; \
+	fi; \
+	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE logs -f app db
 
 docker-stop:
 	@if [ -z "$(ENV)" ]; then \
@@ -98,7 +116,12 @@ docker-stop:
 		echo "ENV is not valid. Must be one of: development, staging, production"; \
 		exit 1; \
 	fi
-	@./scripts/stop-docker.sh $(ENV)
+	@ENV_FILE=.env.$(ENV); \
+	if [ ! -f $$ENV_FILE ]; then \
+		echo "Environment file $$ENV_FILE not found. Please create it."; \
+		exit 1; \
+	fi; \
+	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE down
 
 # Docker Compose commands for the entire stack
 docker-compose-up:
@@ -110,21 +133,36 @@ docker-compose-up:
 		echo "ENV is not valid. Must be one of: development, staging, production"; \
 		exit 1; \
 	fi
-	APP_ENV=$(ENV) docker-compose up -d
+	@ENV_FILE=.env.$(ENV); \
+	if [ ! -f $$ENV_FILE ]; then \
+		echo "Environment file $$ENV_FILE not found. Please create it."; \
+		exit 1; \
+	fi; \
+	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE up -d
 
 docker-compose-down:
 	@if [ -z "$(ENV)" ]; then \
 		echo "ENV is not set. Usage: make docker-compose-down ENV=development|staging|production"; \
 		exit 1; \
 	fi
-	APP_ENV=$(ENV) docker-compose down
+	@ENV_FILE=.env.$(ENV); \
+	if [ ! -f $$ENV_FILE ]; then \
+		echo "Environment file $$ENV_FILE not found. Please create it."; \
+		exit 1; \
+	fi; \
+	APP_ENV=$(ENV) $(DOCKER_COMPOSE) down
 
 docker-compose-logs:
 	@if [ -z "$(ENV)" ]; then \
 		echo "ENV is not set. Usage: make docker-compose-logs ENV=development|staging|production"; \
 		exit 1; \
 	fi
-	APP_ENV=$(ENV) docker-compose logs -f
+	@ENV_FILE=.env.$(ENV); \
+	if [ ! -f $$ENV_FILE ]; then \
+		echo "Environment file $$ENV_FILE not found. Please create it."; \
+		exit 1; \
+	fi; \
+	APP_ENV=$(ENV) $(DOCKER_COMPOSE) logs -f
 
 # Help
 help:

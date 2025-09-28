@@ -40,13 +40,15 @@ set +a
 
 # Print confirmation with masked values
 echo "Environment: $ENV"
-echo "Database: *********$(echo $POSTGRES_URL | sed 's/.*@/@/')"
+echo "Database host: ${POSTGRES_HOST:-${DB_HOST:-Not set}}"
+echo "Database port: ${POSTGRES_PORT:-${DB_PORT:-Not set}}"
+echo "Database name: ${POSTGRES_DB:-${DB_NAME:-Not set}}"
+echo "Database user: ${POSTGRES_USER:-${DB_USER:-Not set}}"
 echo "API keys: ******** (masked for security)"
 
 # Build the Docker image with secrets but without showing them in console output
 docker build --no-cache \
     --build-arg APP_ENV="$ENV" \
-    --build-arg POSTGRES_URL="$POSTGRES_URL" \
     --build-arg LLM_API_KEY="$LLM_API_KEY" \
     --build-arg LANGFUSE_PUBLIC_KEY="$LANGFUSE_PUBLIC_KEY" \
     --build-arg LANGFUSE_SECRET_KEY="$LANGFUSE_SECRET_KEY" \
