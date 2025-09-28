@@ -165,7 +165,11 @@ class Settings:
         self.LOG_FORMAT = os.getenv("LOG_FORMAT", "json")  # "json" or "console"
 
         # Postgres Configuration
-        self.POSTGRES_URL = os.getenv("POSTGRES_URL", "")
+        self.POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+        self.POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
+        self.POSTGRES_DB = os.getenv("POSTGRES_DB", "food_order_db")
+        self.POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+        self.POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
         self.POSTGRES_POOL_SIZE = int(os.getenv("POSTGRES_POOL_SIZE", "20"))
         self.POSTGRES_MAX_OVERFLOW = int(os.getenv("POSTGRES_MAX_OVERFLOW", "10"))
         self.CHECKPOINT_TABLES = ["checkpoint_blobs", "checkpoint_writes", "checkpoints"]

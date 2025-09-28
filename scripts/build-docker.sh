@@ -40,13 +40,27 @@ set +a
 
 # Print confirmation with masked values
 echo "Environment: $ENV"
-echo "Database: *********$(echo $POSTGRES_URL | sed 's/.*@/@/')"
+# Add a helper to mask any set values
+mask_env() {
+    local value="$1"
+    if [ -z "$value" ]; then
+        echo "Not set"
+    else
+        echo "********"
+    fi
+}
+
+echo "Environment: $ENV"
+# Mask database connection metadata instead of printing it directly
+echo "Database host: $(mask_env "${POSTGRES_HOST:-${DB_HOST:-}}")"
+echo "Database port: $(mask_env "${POSTGRES_PORT:-${DB_PORT:-}}")"
+echo "Database name: $(mask_env "${POSTGRES_DB:-${DB_NAME:-}}")"
+echo "Database user: $(mask_env "${POSTGRES_USER:-${DB_USER:-}}")"
 echo "API keys: ******** (masked for security)"
 
 # Build the Docker image with secrets but without showing them in console output
 docker build --no-cache \
     --build-arg APP_ENV="$ENV" \
-    --build-arg POSTGRES_URL="$POSTGRES_URL" \
     --build-arg LLM_API_KEY="$LLM_API_KEY" \
     --build-arg LANGFUSE_PUBLIC_KEY="$LANGFUSE_PUBLIC_KEY" \
     --build-arg LANGFUSE_SECRET_KEY="$LANGFUSE_SECRET_KEY" \

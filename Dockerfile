@@ -5,7 +5,6 @@ WORKDIR /app
 
 # Set non-sensitive environment variables
 ARG APP_ENV=production
-ARG POSTGRES_URL
 
 ENV APP_ENV=${APP_ENV} \
     PYTHONFAULTHANDLER=1 \
@@ -13,8 +12,7 @@ ENV APP_ENV=${APP_ENV} \
     PYTHONHASHSEED=random \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
-    PIP_DEFAULT_TIMEOUT=100 \
-    POSTGRES_URL=${POSTGRES_URL}
+    PIP_DEFAULT_TIMEOUT=100
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \

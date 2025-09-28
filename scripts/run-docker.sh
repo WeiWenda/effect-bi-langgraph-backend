@@ -17,29 +17,25 @@ if [[ ! "$ENV" =~ ^(development|staging|production)$ ]]; then
   exit 1
 fi
 
-CONTAINER_NAME="fastapi-langgraph-$ENV"
-IMAGE_NAME="fastapi-langgraph-template:$ENV"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="$PROJECT_ROOT/.env.$ENV"
 
-echo "Starting Docker container for $ENV environment"
-
-# Check if container already exists
-if [ "$(docker ps -a -q -f name=$CONTAINER_NAME)" ]; then
-  echo "Container $CONTAINER_NAME already exists. Removing it..."
-  docker stop $CONTAINER_NAME >/dev/null 2>&1 || true
-  docker rm $CONTAINER_NAME >/dev/null 2>&1 || true
+if [ -f "$ENV_FILE" ]; then
+  echo "Loading environment variables from $ENV_FILE"
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+else
+  echo "Warning: $ENV_FILE not found. Relying on existing environment variables."
 fi
 
-# Create logs directory if it doesn't exist
-mkdir -p ./logs
+cd "$PROJECT_ROOT"
 
-# Run the container
-echo "Running container $CONTAINER_NAME from image $IMAGE_NAME"
-docker run -d \
-  -p 8000:8000 \
-  -v ./logs:/app/logs \
-  --name $CONTAINER_NAME \
-  $IMAGE_NAME
-
-echo "Container $CONTAINER_NAME started successfully"
-echo "API is available at http://localhost:8000"
-echo "To view logs, run: make docker-logs ENV=$ENV" 
+if [ -f "$ENV_FILE" ]; then
+  echo "Running docker compose with env file $ENV_FILE"
+  APP_ENV=$ENV docker compose --env-file "$ENV_FILE" up -d --build db app
+else
+  APP_ENV=$ENV docker compose up -d --build db app
+fi

@@ -74,13 +74,10 @@ echo -e "${GREEN}Project root:    ${YELLOW}$PROJECT_ROOT${NC}"
 echo -e "${GREEN}Project name:    ${YELLOW}${PROJECT_NAME:-Not set}${NC}"
 echo -e "${GREEN}API version:     ${YELLOW}${VERSION:-Not set}${NC}"
 
-# Show only the part after @ for database URL (for security)
-if [[ -n "$POSTGRES_URL" && "$POSTGRES_URL" == *"@"* ]]; then
-    DB_DISPLAY=$(echo "$POSTGRES_URL" | sed 's/.*@/@/')
-    echo -e "${GREEN}Database URL:    ${YELLOW}*********$DB_DISPLAY${NC}"
-else
-    echo -e "${GREEN}Database URL:    ${YELLOW}${POSTGRES_URL:-Not set}${NC}"
-fi
+echo -e "${GREEN}Database host:   ${YELLOW}${POSTGRES_HOST:-${DB_HOST:-Not set}}${NC}"
+echo -e "${GREEN}Database port:   ${YELLOW}${POSTGRES_PORT:-${DB_PORT:-Not set}}${NC}"
+echo -e "${GREEN}Database name:   ${YELLOW}${POSTGRES_DB:-${DB_NAME:-Not set}}${NC}"
+echo -e "${GREEN}Database user:   ${YELLOW}${POSTGRES_USER:-${DB_USER:-Not set}}${NC}"
 
 echo -e "${GREEN}LLM model:       ${YELLOW}${LLM_MODEL:-Not set}${NC}"
 echo -e "${GREEN}Log level:       ${YELLOW}${LOG_LEVEL:-Not set}${NC}"
