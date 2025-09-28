@@ -39,8 +39,13 @@ class DatabaseService:
             max_overflow = settings.POSTGRES_MAX_OVERFLOW
 
             # Create engine with appropriate pool configuration
+            connection_url = (
+                f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+                f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+            )
+
             self.engine = create_engine(
-                settings.POSTGRES_URL,
+                connection_url,
                 pool_pre_ping=True,
                 poolclass=QueuePool,
                 pool_size=pool_size,
