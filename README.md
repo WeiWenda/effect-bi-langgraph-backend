@@ -97,7 +97,7 @@ uv sync
 2. Run the application:
 
 ```bash
-make [dev|staging|production] # e.g. make dev
+make [dev|staging|prod] # e.g. make dev
 ```
 
 1. Go to Swagger UI:
