@@ -26,7 +26,7 @@ from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.core.metrics import setup_metrics
-from app.core.middleware import MetricsMiddleware
+from app.core.middleware import LoggingContextMiddleware, MetricsMiddleware
 from app.services.database import database_service
 
 # Load environment variables
@@ -63,6 +63,9 @@ app = FastAPI(
 
 # Set up Prometheus metrics
 setup_metrics(app)
+
+# Add logging context middleware (must be added before other middleware to capture context)
+app.add_middleware(LoggingContextMiddleware)
 
 # Add custom metrics middleware
 app.add_middleware(MetricsMiddleware)
