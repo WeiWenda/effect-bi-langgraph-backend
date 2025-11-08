@@ -34,7 +34,7 @@ _request_context: ContextVar[Dict[str, Any]] = ContextVar("request_context", def
 
 def bind_context(**kwargs: Any) -> None:
     """Bind context variables to the current request.
-    
+
     Args:
         **kwargs: Key-value pairs to bind to the logging context
     """
@@ -49,7 +49,7 @@ def clear_context() -> None:
 
 def get_context() -> Dict[str, Any]:
     """Get the current logging context.
-    
+
     Returns:
         Dict[str, Any]: Current context dictionary
     """
@@ -58,14 +58,14 @@ def get_context() -> Dict[str, Any]:
 
 def add_context_to_event_dict(logger: Any, method_name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:
     """Add context variables to the event dictionary.
-    
+
     This processor adds any bound context variables to each log event.
-    
+
     Args:
         logger: The logger instance
         method_name: The name of the logging method
         event_dict: The event dictionary to modify
-        
+
     Returns:
         Dict[str, Any]: Modified event dictionary with context variables
     """
@@ -183,7 +183,8 @@ def setup_logging() -> None:
     # Get shared processors
     shared_processors = get_structlog_processors(
         # Include detailed file info only in development and test
-        include_file_info=settings.ENVIRONMENT in [Environment.DEVELOPMENT, Environment.TEST]
+        include_file_info=settings.ENVIRONMENT
+        in [Environment.DEVELOPMENT, Environment.TEST]
     )
 
     # Configure standard logging

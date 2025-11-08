@@ -44,7 +44,7 @@ class LLMRegistry:
             "name": "gpt-5-mini",
             "llm": ChatOpenAI(
                 model="gpt-5-mini",
-                api_key=settings.LLM_API_KEY,
+                api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
                 model_kwargs={
                     "reasoning": {"effort": "low"},
@@ -55,7 +55,7 @@ class LLMRegistry:
             "name": "gpt-5",
             "llm": ChatOpenAI(
                 model="gpt-5",
-                api_key=settings.LLM_API_KEY,
+                api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
                 model_kwargs={
                     "reasoning": {"effort": "medium"},
@@ -66,7 +66,7 @@ class LLMRegistry:
             "name": "gpt-5-nano",
             "llm": ChatOpenAI(
                 model="gpt-5-nano",
-                api_key=settings.LLM_API_KEY,
+                api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
                 model_kwargs={
                     "reasoning": {"effort": "minimal"},
@@ -78,7 +78,7 @@ class LLMRegistry:
             "llm": ChatOpenAI(
                 model="gpt-4o",
                 temperature=settings.DEFAULT_LLM_TEMPERATURE,
-                api_key=settings.LLM_API_KEY,
+                api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
                 top_p=0.95 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.8,
                 presence_penalty=0.1 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.0,
@@ -90,7 +90,7 @@ class LLMRegistry:
             "llm": ChatOpenAI(
                 model="gpt-4o-mini",
                 temperature=settings.DEFAULT_LLM_TEMPERATURE,
-                api_key=settings.LLM_API_KEY,
+                api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
                 top_p=0.9 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.8,
             ),
@@ -127,7 +127,7 @@ class LLMRegistry:
         # If user provides kwargs, create a new instance with those args
         if kwargs:
             logger.debug("creating_llm_with_custom_args", model_name=model_name, custom_args=list(kwargs.keys()))
-            return ChatOpenAI(model=model_name, api_key=settings.LLM_API_KEY, **kwargs)
+            return ChatOpenAI(model=model_name, api_key=settings.OPENAI_API_KEY, **kwargs)
 
         # Return the default instance
         logger.debug("using_default_llm_instance", model_name=model_name)
