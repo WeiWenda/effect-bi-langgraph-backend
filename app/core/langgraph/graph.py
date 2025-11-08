@@ -318,7 +318,6 @@ class LangGraphAgent:
     def __process_messages(self, messages: list[BaseMessage]) -> list[Message]:
         openai_style_messages = convert_to_openai_messages(messages)
         # keep just assistant and user messages
-        print(openai_style_messages)
         return [
             Message(role=message["role"], content=str(message["content"]))
             for message in openai_style_messages
