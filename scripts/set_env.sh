@@ -79,7 +79,7 @@ echo -e "${GREEN}Database port:   ${YELLOW}${POSTGRES_PORT:-${DB_PORT:-Not set}}
 echo -e "${GREEN}Database name:   ${YELLOW}${POSTGRES_DB:-${DB_NAME:-Not set}}${NC}"
 echo -e "${GREEN}Database user:   ${YELLOW}${POSTGRES_USER:-${DB_USER:-Not set}}${NC}"
 
-echo -e "${GREEN}LLM model:       ${YELLOW}${LLM_MODEL:-Not set}${NC}"
+echo -e "${GREEN}LLM model:       ${YELLOW}${DEFAULT_LLM_MODEL:-Not set}${NC}"
 echo -e "${GREEN}Log level:       ${YELLOW}${LOG_LEVEL:-Not set}${NC}"
 echo -e "${GREEN}Debug mode:      ${YELLOW}${DEBUG:-Not set}${NC}"
 
