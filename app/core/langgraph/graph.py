@@ -1,9 +1,7 @@
 """This file contains the LangGraph Agent/workflow and interactions with the LLM."""
 
 from typing import (
-    Any,
     AsyncGenerator,
-    Dict,
     Optional,
 )
 from urllib.parse import quote_plus
@@ -14,7 +12,6 @@ from langchain_core.messages import (
     ToolMessage,
     convert_to_openai_messages,
 )
-from langchain_openai import ChatOpenAI
 from langfuse.langchain import CallbackHandler
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import (
@@ -26,7 +23,6 @@ from langgraph.graph.state import (
     CompiledStateGraph,
 )
 from langgraph.types import StateSnapshot
-from openai import OpenAIError
 from psycopg_pool import AsyncConnectionPool
 
 from app.core.config import (
@@ -41,9 +37,11 @@ from app.schemas import (
     GraphState,
     Message,
 )
+from app.services.llm import llm_service
 from app.utils import (
     dump_messages,
     prepare_messages,
+    process_llm_response,
 )
 
 
@@ -56,39 +54,18 @@ class LangGraphAgent:
 
     def __init__(self):
         """Initialize the LangGraph Agent with necessary components."""
-        # Use environment-specific LLM model
-        self.llm = ChatOpenAI(
-            model=settings.LLM_MODEL,
-            temperature=settings.DEFAULT_LLM_TEMPERATURE,
-            api_key=settings.LLM_API_KEY,
-            max_tokens=settings.MAX_TOKENS,
-            **self._get_model_kwargs(),
-        ).bind_tools(tools)
+        # Use the LLM service with tools bound
+        self.llm_service = llm_service
+        self.llm_service.bind_tools(tools)
         self.tools_by_name = {tool.name: tool for tool in tools}
         self._connection_pool: Optional[AsyncConnectionPool] = None
         self._graph: Optional[CompiledStateGraph] = None
 
-        logger.info("llm_initialized", model=settings.LLM_MODEL, environment=settings.ENVIRONMENT.value)
-
-    def _get_model_kwargs(self) -> Dict[str, Any]:
-        """Get environment-specific model kwargs.
-
-        Returns:
-            Dict[str, Any]: Additional model arguments based on environment
-        """
-        model_kwargs = {}
-
-        # Development - we can use lower speeds for cost savings
-        if settings.ENVIRONMENT == Environment.DEVELOPMENT:
-            model_kwargs["top_p"] = 0.8
-
-        # Production - use higher quality settings
-        elif settings.ENVIRONMENT == Environment.PRODUCTION:
-            model_kwargs["top_p"] = 0.95
-            model_kwargs["presence_penalty"] = 0.1
-            model_kwargs["frequency_penalty"] = 0.1
-
-        return model_kwargs
+        logger.info(
+            "langgraph_agent_initialized",
+            model=settings.DEFAULT_LLM_MODEL,
+            environment=settings.ENVIRONMENT.value,
+        )
 
     async def _get_connection_pool(self) -> AsyncConnectionPool:
         """Get a PostgreSQL connection pool using environment-specific settings.
@@ -137,54 +114,47 @@ class LangGraphAgent:
         Returns:
             Command: Command object with updated state and next node to execute.
         """
-        messages = prepare_messages(state.messages, self.llm, SYSTEM_PROMPT)
+        # Get the current LLM instance for metrics
+        current_llm = self.llm_service.get_llm()
+        model_name = (
+            current_llm.model_name
+            if current_llm and hasattr(current_llm, "model_name")
+            else settings.DEFAULT_LLM_MODEL
+        )
 
-        llm_calls_num = 0
+        # Prepare messages with system prompt
+        messages = prepare_messages(state.messages, current_llm, SYSTEM_PROMPT)
 
-        # Configure retry attempts based on environment
-        max_retries = settings.MAX_LLM_CALL_RETRIES
+        try:
+            # Use LLM service with automatic retries and circular fallback
+            with llm_inference_duration_seconds.labels(model=model_name).time():
+                response_message = await self.llm_service.call(dump_messages(messages))
 
-        for attempt in range(max_retries):
-            try:
-                with llm_inference_duration_seconds.labels(model=self.llm.model_name).time():
-                    response_message = await self.llm.ainvoke(dump_messages(messages))
-                logger.info(
-                    "llm_response_generated",
-                    session_id=state.session_id,
-                    llm_calls_num=llm_calls_num + 1,
-                    model=settings.LLM_MODEL,
-                    environment=settings.ENVIRONMENT.value,
-                )
+            # Process response to handle structured content blocks
+            response_message = process_llm_response(response_message)
 
-                # Determine next node based on whether there are tool calls
-                if response_message.tool_calls:
-                    goto = "tool_call"
-                else:
-                    goto = END
+            logger.info(
+                "llm_response_generated",
+                session_id=state.session_id,
+                model=model_name,
+                environment=settings.ENVIRONMENT.value,
+            )
 
-                return Command(update={"messages": [response_message]}, goto=goto)
-            except OpenAIError as e:
-                logger.error(
-                    "llm_call_failed",
-                    llm_calls_num=llm_calls_num,
-                    attempt=attempt + 1,
-                    max_retries=max_retries,
-                    error=str(e),
-                    environment=settings.ENVIRONMENT.value,
-                )
-                llm_calls_num += 1
+            # Determine next node based on whether there are tool calls
+            if response_message.tool_calls:
+                goto = "tool_call"
+            else:
+                goto = END
 
-                # In production, we might want to fall back to a more reliable model
-                if settings.ENVIRONMENT == Environment.PRODUCTION and attempt == max_retries - 2:
-                    fallback_model = "gpt-4o"
-                    logger.warning(
-                        "using_fallback_model", model=fallback_model, environment=settings.ENVIRONMENT.value
-                    )
-                    self.llm.model_name = fallback_model
-
-                continue
-
-        raise Exception(f"Failed to get a response from the LLM after {max_retries} attempts")
+            return Command(update={"messages": [response_message]}, goto=goto)
+        except Exception as e:
+            logger.error(
+                "llm_call_failed_all_models",
+                session_id=state.session_id,
+                error=str(e),
+                environment=settings.ENVIRONMENT.value,
+            )
+            raise Exception(f"failed to get llm response after trying all models: {str(e)}")
 
     # Define our tool node
     async def _tool_call(self, state: GraphState) -> Command:
@@ -348,8 +318,9 @@ class LangGraphAgent:
     def __process_messages(self, messages: list[BaseMessage]) -> list[Message]:
         openai_style_messages = convert_to_openai_messages(messages)
         # keep just assistant and user messages
+        print(openai_style_messages)
         return [
-            Message(**message)
+            Message(role=message["role"], content=str(message["content"]))
             for message in openai_style_messages
             if message["role"] in ["assistant", "user"] and message["content"]
         ]
