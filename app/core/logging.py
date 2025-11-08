@@ -8,12 +8,14 @@ console-friendly development logging and JSON-formatted production logging.
 import json
 import logging
 import sys
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
 from typing import (
     Any,
     Dict,
     List,
+    Optional,
 )
 
 import structlog
@@ -25,6 +27,52 @@ from app.core.config import (
 
 # Ensure log directory exists
 settings.LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# Context variables for storing request-specific data
+_request_context: ContextVar[Dict[str, Any]] = ContextVar("request_context", default={})
+
+
+def bind_context(**kwargs: Any) -> None:
+    """Bind context variables to the current request.
+    
+    Args:
+        **kwargs: Key-value pairs to bind to the logging context
+    """
+    current = _request_context.get()
+    _request_context.set({**current, **kwargs})
+
+
+def clear_context() -> None:
+    """Clear all context variables for the current request."""
+    _request_context.set({})
+
+
+def get_context() -> Dict[str, Any]:
+    """Get the current logging context.
+    
+    Returns:
+        Dict[str, Any]: Current context dictionary
+    """
+    return _request_context.get()
+
+
+def add_context_to_event_dict(logger: Any, method_name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Add context variables to the event dictionary.
+    
+    This processor adds any bound context variables to each log event.
+    
+    Args:
+        logger: The logger instance
+        method_name: The name of the logging method
+        event_dict: The event dictionary to modify
+        
+    Returns:
+        Dict[str, Any]: Modified event dictionary with context variables
+    """
+    context = get_context()
+    if context:
+        event_dict.update(context)
+    return event_dict
 
 
 def get_log_file_path() -> Path:
@@ -94,6 +142,8 @@ def get_structlog_processors(include_file_info: bool = True) -> List[Any]:
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
         structlog.processors.UnicodeDecoder(),
+        # Add context variables (user_id, session_id, etc.) to all log events
+        add_context_to_event_dict,
     ]
 
     # Add callsite parameters if file info is requested

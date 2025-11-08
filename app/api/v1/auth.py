@@ -21,7 +21,7 @@ from fastapi.security import (
 
 from app.core.config import settings
 from app.core.limiter import limiter
-from app.core.logging import logger
+from app.core.logging import bind_context, logger
 from app.models.session import Session
 from app.models.user import User
 from app.schemas.auth import (
@@ -84,6 +84,9 @@ async def get_current_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        # Bind user_id to logging context for all subsequent logs in this request
+        bind_context(user_id=user_id_int)
+
         return user
     except ValueError as ve:
         logger.error("token_validation_failed", error=str(ve), exc_info=True)
@@ -133,6 +136,9 @@ async def get_current_session(
                 detail="Session not found",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+
+        # Bind user_id to logging context for all subsequent logs in this request
+        bind_context(user_id=session.user_id)
 
         return session
     except ValueError as ve:
