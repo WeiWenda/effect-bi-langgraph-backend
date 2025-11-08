@@ -76,7 +76,7 @@ echo "Database Port: $( [[ -n ${POSTGRES_PORT:-${DB_PORT:-}} ]] && echo 'set' ||
 echo "Database Name: $( [[ -n ${POSTGRES_DB:-${DB_NAME:-}} ]] && echo 'set' || echo 'Not set' )"
 echo "Database User: $( [[ -n ${POSTGRES_USER:-${DB_USER:-}} ]] && echo 'set' || echo 'Not set' )"
 
-echo "LLM Model: ${LLM_MODEL:-Not set}"
+echo "LLM Model: ${DEFAULT_LLM_MODEL:-Not set}"
 echo "Debug Mode: ${DEBUG:-false}"
 
 # Run database migrations if necessary
