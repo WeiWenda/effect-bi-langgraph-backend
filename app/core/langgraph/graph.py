@@ -4,7 +4,6 @@ from typing import (
     Any,
     AsyncGenerator,
     Dict,
-    Literal,
     Optional,
 )
 from urllib.parse import quote_plus
@@ -22,7 +21,10 @@ from langgraph.graph import (
     END,
     StateGraph,
 )
-from langgraph.graph.state import CompiledStateGraph
+from langgraph.graph.state import (
+    Command,
+    CompiledStateGraph,
+)
 from langgraph.types import StateSnapshot
 from openai import OpenAIError
 from psycopg_pool import AsyncConnectionPool
@@ -126,14 +128,14 @@ class LangGraphAgent:
                 raise e
         return self._connection_pool
 
-    async def _chat(self, state: GraphState) -> dict:
+    async def _chat(self, state: GraphState) -> Command:
         """Process the chat state and generate a response.
 
         Args:
             state (GraphState): The current state of the conversation.
 
         Returns:
-            dict: Updated state with new messages.
+            Command: Command object with updated state and next node to execute.
         """
         messages = prepare_messages(state.messages, self.llm, SYSTEM_PROMPT)
 
@@ -145,7 +147,7 @@ class LangGraphAgent:
         for attempt in range(max_retries):
             try:
                 with llm_inference_duration_seconds.labels(model=self.llm.model_name).time():
-                    generated_state = {"messages": [await self.llm.ainvoke(dump_messages(messages))]}
+                    response_message = await self.llm.ainvoke(dump_messages(messages))
                 logger.info(
                     "llm_response_generated",
                     session_id=state.session_id,
@@ -153,7 +155,14 @@ class LangGraphAgent:
                     model=settings.LLM_MODEL,
                     environment=settings.ENVIRONMENT.value,
                 )
-                return generated_state
+
+                # Determine next node based on whether there are tool calls
+                if response_message.tool_calls:
+                    goto = "tool_call"
+                else:
+                    goto = END
+
+                return Command(update={"messages": [response_message]}, goto=goto)
             except OpenAIError as e:
                 logger.error(
                     "llm_call_failed",
@@ -178,14 +187,14 @@ class LangGraphAgent:
         raise Exception(f"Failed to get a response from the LLM after {max_retries} attempts")
 
     # Define our tool node
-    async def _tool_call(self, state: GraphState) -> GraphState:
+    async def _tool_call(self, state: GraphState) -> Command:
         """Process tool calls from the last message.
 
         Args:
             state: The current agent state containing messages and tool calls.
 
         Returns:
-            Dict with updated messages containing tool responses.
+            Command: Command object with updated messages and routing back to chat.
         """
         outputs = []
         for tool_call in state.messages[-1].tool_calls:
@@ -197,25 +206,7 @@ class LangGraphAgent:
                     tool_call_id=tool_call["id"],
                 )
             )
-        return {"messages": outputs}
-
-    def _should_continue(self, state: GraphState) -> Literal["end", "continue"]:
-        """Determine if the agent should continue or end based on the last message.
-
-        Args:
-            state: The current agent state containing messages.
-
-        Returns:
-            Literal["end", "continue"]: "end" if there are no tool calls, "continue" otherwise.
-        """
-        messages = state.messages
-        last_message = messages[-1]
-        # If there is no function call, then we finish
-        if not last_message.tool_calls:
-            return "end"
-        # Otherwise if there is, we continue
-        else:
-            return "continue"
+        return Command(update={"messages": outputs}, goto="chat")
 
     async def create_graph(self) -> Optional[CompiledStateGraph]:
         """Create and configure the LangGraph workflow.
@@ -226,14 +217,8 @@ class LangGraphAgent:
         if self._graph is None:
             try:
                 graph_builder = StateGraph(GraphState)
-                graph_builder.add_node("chat", self._chat)
-                graph_builder.add_node("tool_call", self._tool_call)
-                graph_builder.add_conditional_edges(
-                    "chat",
-                    self._should_continue,
-                    {"continue": "tool_call", "end": END},
-                )
-                graph_builder.add_edge("tool_call", "chat")
+                graph_builder.add_node("chat", self._chat, ends=["tool_call", END])
+                graph_builder.add_node("tool_call", self._tool_call, ends=["chat"])
                 graph_builder.set_entry_point("chat")
                 graph_builder.set_finish_point("chat")
 
@@ -293,7 +278,7 @@ class LangGraphAgent:
                 "user_id": user_id,
                 "session_id": session_id,
                 "environment": settings.ENVIRONMENT.value,
-                "debug": False,
+                "debug": settings.DEBUG,
             },
         }
         try:
