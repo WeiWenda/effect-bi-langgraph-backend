@@ -14,12 +14,13 @@ from fastapi import (
     Request,
 )
 from fastapi.responses import StreamingResponse
-from app.core.metrics import llm_stream_duration_seconds
+
 from app.api.v1.auth import get_current_session
 from app.core.config import settings
 from app.core.langgraph.graph import LangGraphAgent
 from app.core.limiter import limiter
 from app.core.logging import logger
+from app.core.metrics import llm_stream_duration_seconds
 from app.models.session import Session
 from app.schemas.chat import (
     ChatRequest,
@@ -30,7 +31,6 @@ from app.schemas.chat import (
 
 router = APIRouter()
 agent = LangGraphAgent()
-
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -60,11 +60,7 @@ async def chat(
             message_count=len(chat_request.messages),
         )
 
-       
-
-        result = await agent.get_response(
-            chat_request.messages, session.id, user_id=session.user_id
-        )
+        result = await agent.get_response(chat_request.messages, session.id, user_id=session.user_id)
 
         logger.info("chat_request_processed", session_id=session.id)
 
@@ -112,10 +108,10 @@ async def chat_stream(
             """
             try:
                 full_response = ""
-                with llm_stream_duration_seconds.labels(model=agent.llm.model_name).time():
+                with llm_stream_duration_seconds.labels(model=agent.llm_service.get_llm().get_name()).time():
                     async for chunk in agent.get_stream_response(
                         chat_request.messages, session.id, user_id=session.user_id
-                     ):
+                    ):
                         full_response += chunk
                         response = StreamResponse(content=chunk, done=False)
                         yield f"data: {json.dumps(response.model_dump())}\n\n"
