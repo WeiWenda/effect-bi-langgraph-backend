@@ -1,5 +1,6 @@
 """This file contains the LangGraph Agent/workflow and interactions with the LLM."""
 
+import asyncio
 from typing import (
     AsyncGenerator,
     Optional,
@@ -22,7 +23,11 @@ from langgraph.graph.state import (
     Command,
     CompiledStateGraph,
 )
-from langgraph.types import StateSnapshot
+from langgraph.types import (
+    RunnableConfig,
+    StateSnapshot,
+)
+from mem0 import AsyncMemory
 from psycopg_pool import AsyncConnectionPool
 
 from app.core.config import (
@@ -32,7 +37,7 @@ from app.core.config import (
 from app.core.langgraph.tools import tools
 from app.core.logging import logger
 from app.core.metrics import llm_inference_duration_seconds
-from app.core.prompts import SYSTEM_PROMPT
+from app.core.prompts import load_system_prompt
 from app.schemas import (
     GraphState,
     Message,
@@ -60,12 +65,38 @@ class LangGraphAgent:
         self.tools_by_name = {tool.name: tool for tool in tools}
         self._connection_pool: Optional[AsyncConnectionPool] = None
         self._graph: Optional[CompiledStateGraph] = None
-
+        self.memory: Optional[AsyncMemory] = None
         logger.info(
             "langgraph_agent_initialized",
             model=settings.DEFAULT_LLM_MODEL,
             environment=settings.ENVIRONMENT.value,
         )
+
+    async def _long_term_memory(self) -> AsyncMemory:
+        """Initialize the long term memory."""
+        if self.memory is None:
+            self.memory = await AsyncMemory.from_config(
+                config_dict={
+                    "vector_store": {
+                        "provider": "pgvector",
+                        "config": {
+                            "collection_name": settings.LONG_TERM_MEMORY_COLLECTION_NAME,
+                            "dbname": settings.POSTGRES_DB,
+                            "user": settings.POSTGRES_USER,
+                            "password": settings.POSTGRES_PASSWORD,
+                            "host": settings.POSTGRES_HOST,
+                            "port": settings.POSTGRES_PORT,
+                        },
+                    },
+                    "llm": {
+                        "provider": "openai",
+                        "config": {"model": settings.LONG_TERM_MEMORY_MODEL},
+                    },
+                    "embedder": {"provider": "openai", "config": {"model": settings.LONG_TERM_MEMORY_EMBEDDER_MODEL}},
+                    # "custom_fact_extraction_prompt": load_custom_fact_extraction_prompt(),
+                }
+            )
+        return self.memory
 
     async def _get_connection_pool(self) -> AsyncConnectionPool:
         """Get a PostgreSQL connection pool using environment-specific settings.
@@ -105,7 +136,45 @@ class LangGraphAgent:
                 raise e
         return self._connection_pool
 
-    async def _chat(self, state: GraphState) -> Command:
+    async def _get_relevant_memory(self, user_id: str, query: str) -> str:
+        """Get the relevant memory for the user and query.
+
+        Args:
+            user_id (str): The user ID.
+            query (str): The query to search for.
+
+        Returns:
+            str: The relevant memory.
+        """
+        try:
+            memory = await self._long_term_memory()
+            results = await memory.search(user_id=str(user_id), query=query)
+            print(results)
+            return "\n".join([f"* {result['memory']}" for result in results["results"]])
+        except Exception as e:
+            logger.error("failed_to_get_relevant_memory", error=str(e), user_id=user_id, query=query)
+            return ""
+
+    async def _update_long_term_memory(self, user_id: str, messages: list[dict], metadata: dict = None) -> None:
+        """Update the long term memory.
+
+        Args:
+            user_id (str): The user ID.
+            messages (list[dict]): The messages to update the long term memory with.
+            metadata (dict): Optional metadata to include.
+        """
+        try:
+            memory = await self._long_term_memory()
+            await memory.add(messages, user_id=str(user_id), metadata=metadata)
+            logger.info("long_term_memory_updated_successfully", user_id=user_id)
+        except Exception as e:
+            logger.exception(
+                "failed_to_update_long_term_memory",
+                user_id=user_id,
+                error=str(e),
+            )
+
+    async def _chat(self, state: GraphState, config: RunnableConfig) -> Command:
         """Process the chat state and generate a response.
 
         Args:
@@ -122,6 +191,8 @@ class LangGraphAgent:
             else settings.DEFAULT_LLM_MODEL
         )
 
+        SYSTEM_PROMPT = load_system_prompt(long_term_memory=state.long_term_memory)
+
         # Prepare messages with system prompt
         messages = prepare_messages(state.messages, current_llm, SYSTEM_PROMPT)
 
@@ -135,7 +206,7 @@ class LangGraphAgent:
 
             logger.info(
                 "llm_response_generated",
-                session_id=state.session_id,
+                session_id=config["configurable"]["thread_id"],
                 model=model_name,
                 environment=settings.ENVIRONMENT.value,
             )
@@ -150,7 +221,7 @@ class LangGraphAgent:
         except Exception as e:
             logger.error(
                 "llm_call_failed_all_models",
-                session_id=state.session_id,
+                session_id=config["configurable"]["thread_id"],
                 error=str(e),
                 environment=settings.ENVIRONMENT.value,
             )
@@ -251,14 +322,23 @@ class LangGraphAgent:
                 "debug": settings.DEBUG,
             },
         }
+        relevant_memory = (
+            await self._get_relevant_memory(user_id, messages[-1].content)
+        ) or "No relevant memory found."
         try:
             response = await self._graph.ainvoke(
-                {"messages": dump_messages(messages), "session_id": session_id}, config
+                input={"messages": dump_messages(messages), "long_term_memory": relevant_memory},
+                config=config,
+            )
+            # Run memory update in background without blocking the response
+            asyncio.create_task(
+                self._update_long_term_memory(
+                    user_id, convert_to_openai_messages(response["messages"]), config["metadata"]
+                )
             )
             return self.__process_messages(response["messages"])
         except Exception as e:
             logger.error(f"Error getting response: {str(e)}")
-            raise e
 
     async def get_stream_response(
         self, messages: list[Message], session_id: str, user_id: Optional[str] = None
@@ -280,13 +360,25 @@ class LangGraphAgent:
                     environment=settings.ENVIRONMENT.value, debug=False, user_id=user_id, session_id=session_id
                 )
             ],
+            "metadata": {
+                "user_id": user_id,
+                "session_id": session_id,
+                "environment": settings.ENVIRONMENT.value,
+                "debug": settings.DEBUG,
+            },
         }
         if self._graph is None:
             self._graph = await self.create_graph()
 
+        relevant_memory = (
+            await self._get_relevant_memory(user_id, messages[-1].content)
+        ) or "No relevant memory found."
+
         try:
             async for token, _ in self._graph.astream(
-                {"messages": dump_messages(messages), "session_id": session_id}, config, stream_mode="messages"
+                {"messages": dump_messages(messages), "long_term_memory": relevant_memory},
+                config,
+                stream_mode="messages",
             ):
                 try:
                     yield token.content
@@ -294,6 +386,15 @@ class LangGraphAgent:
                     logger.error("Error processing token", error=str(token_error), session_id=session_id)
                     # Continue with next token even if current one fails
                     continue
+
+            # After streaming completes, get final state and update memory in background
+            state: StateSnapshot = await sync_to_async(self._graph.get_state)(config=config)
+            if state.values and "messages" in state.values:
+                asyncio.create_task(
+                    self._update_long_term_memory(
+                        user_id, convert_to_openai_messages(state.values["messages"]), config["metadata"]
+                    )
+                )
         except Exception as stream_error:
             logger.error("Error in stream processing", error=str(stream_error), session_id=session_id)
             raise stream_error

@@ -7,5 +7,8 @@ Help the user with their questions.
 - If you don't know the answer, say you don't know. Don't make up an answer.
 - Try to give the most accurate answer possible.
 
+# What you know about the user
+{long_term_memory}
+
 # Current date and time
 {current_date_and_time}
