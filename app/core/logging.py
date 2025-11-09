@@ -172,13 +172,16 @@ def setup_logging() -> None:
     In development: pretty console output
     In staging/production: structured JSON logs
     """
+    # Determine log level based on DEBUG setting
+    log_level = logging.DEBUG if settings.DEBUG else logging.INFO
+    
     # Create file handler for JSON logs
     file_handler = JsonlFileHandler(get_log_file_path())
-    file_handler.setLevel(settings.LOG_LEVEL)
+    file_handler.setLevel(log_level)
 
     # Create console handler
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(settings.LOG_LEVEL)
+    console_handler.setLevel(log_level)
 
     # Get shared processors
     shared_processors = get_structlog_processors(
@@ -190,7 +193,7 @@ def setup_logging() -> None:
     # Configure standard logging
     logging.basicConfig(
         format="%(message)s",
-        level=settings.LOG_LEVEL,
+        level=log_level,
         handlers=[file_handler, console_handler],
     )
 
@@ -225,9 +228,11 @@ setup_logging()
 
 # Create logger instance
 logger = structlog.get_logger()
+log_level_name = "DEBUG" if settings.DEBUG else "INFO"
 logger.info(
     "logging_initialized",
     environment=settings.ENVIRONMENT.value,
-    log_level=settings.LOG_LEVEL,
+    log_level=log_level_name,
     log_format=settings.LOG_FORMAT,
+    debug=settings.DEBUG,
 )
