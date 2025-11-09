@@ -46,9 +46,7 @@ class LLMRegistry:
                 model="gpt-5-mini",
                 api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
-                model_kwargs={
-                    "reasoning": {"effort": "low"},
-                },
+                reasoning={"effort": "low"},
             ),
         },
         {
@@ -57,9 +55,7 @@ class LLMRegistry:
                 model="gpt-5",
                 api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
-                model_kwargs={
-                    "reasoning": {"effort": "medium"},
-                },
+                reasoning={"effort": "medium"},
             ),
         },
         {
@@ -68,9 +64,7 @@ class LLMRegistry:
                 model="gpt-5-nano",
                 api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
-                model_kwargs={
-                    "reasoning": {"effort": "minimal"},
-                },
+                reasoning={"effort": "minimal"},
             ),
         },
         {
