@@ -18,15 +18,15 @@ set-env:
 
 prod:
 	@echo "Starting server in production environment"
-	@bash -c "source scripts/set_env.sh production && ./.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+	@bash -c "source scripts/set_env.sh production && ./.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop uvloop"
 
 staging:
 	@echo "Starting server in staging environment"
-	@bash -c "source scripts/set_env.sh staging && ./.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+	@bash -c "source scripts/set_env.sh staging && ./.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop uvloop"
 
 dev:
 	@echo "Starting server in development environment"
-	@bash -c "source scripts/set_env.sh development && uv run uvicorn app.main:app --reload --port 8000"
+	@bash -c "source scripts/set_env.sh development && uv run uvicorn app.main:app --reload --port 8000 --loop uvloop"
 
 # Evaluation commands
 eval:
