@@ -47,7 +47,11 @@ class Evaluator:
     def __init__(self):
         """Initialize Evaluator with OpenAI and Langfuse clients."""
         self.client = openai.AsyncOpenAI(api_key=settings.EVALUATION_API_KEY, base_url=settings.EVALUATION_BASE_URL)
-        self.langfuse = Langfuse(public_key=settings.LANGFUSE_PUBLIC_KEY, secret_key=settings.LANGFUSE_SECRET_KEY)
+        self.langfuse = Langfuse(
+            public_key=settings.LANGFUSE_PUBLIC_KEY,
+            secret_key=settings.LANGFUSE_SECRET_KEY,
+            timeout=60,  # In seconds
+        )
         # Initialize report data structure
         self.report = initialize_report(settings.EVALUATION_LLM)
         initialize_metrics_summary(self.report, metrics)
@@ -186,6 +190,7 @@ class Evaluator:
             List of traces that haven't been scored yet.
         """
         last_24_hours = datetime.now() - timedelta(hours=24)
+        logger.info("fetching_langfuse_traces", from_timestamp=str(last_24_hours))
         try:
             traces = self.langfuse.api.trace.list(
                 from_timestamp=last_24_hours, order_by="timestamp.asc", limit=100
