@@ -30,8 +30,14 @@ def format_messages(messages: list[dict]) -> str:
     formatted_messages = []
     for idx, message in enumerate(messages):
         if message["type"] == "tool":
+            previous_message = messages[idx - 1]
+            tool_call = previous_message.get('additional_kwargs', {}).get('tool_calls', [])
+            if tool_call:
+                args = tool_call[0].get('function', {}).get('arguments')
+            else:
+                args = previous_message.get('tool_calls')[0].get('args') if previous_message.get('tool_calls') else {}
             formatted_messages.append(
-                f"tool {message.get('name')} input: {messages[idx - 1].get('additional_kwargs', {}).get('tool_calls', [])[0].get('function', {}).get('arguments')} {message.get('content')[:100]}..."
+                f"tool {message.get('name')} input: {args} {message.get('content')[:100]}..."
                 if len(message.get("content", "")) > 100
                 else f"tool {message.get('name')}: {message.get('content')}"
             )
