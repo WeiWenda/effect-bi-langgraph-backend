@@ -13,7 +13,6 @@ from langchain_core.messages import (
     ToolMessage,
     convert_to_openai_messages,
 )
-from langfuse.langchain import CallbackHandler
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import (
     END,
@@ -34,6 +33,7 @@ from app.core.config import (
     Environment,
     settings,
 )
+from app.core.langfuse_init import langfuse_callback_handler
 from app.core.langgraph.tools import tools
 from app.core.logging import logger
 from app.core.metrics import llm_inference_duration_seconds
@@ -314,7 +314,7 @@ class LangGraphAgent:
             self._graph = await self.create_graph()
         config = {
             "configurable": {"thread_id": session_id},
-            "callbacks": [CallbackHandler()],
+            "callbacks": [langfuse_callback_handler],
             "metadata": {
                 "user_id": user_id,
                 "session_id": session_id,
@@ -355,11 +355,7 @@ class LangGraphAgent:
         """
         config = {
             "configurable": {"thread_id": session_id},
-            "callbacks": [
-                CallbackHandler(
-                    environment=settings.ENVIRONMENT.value, debug=False, user_id=user_id, session_id=session_id
-                )
-            ],
+            "callbacks": [langfuse_callback_handler],
             "metadata": {
                 "user_id": user_id,
                 "session_id": session_id,
