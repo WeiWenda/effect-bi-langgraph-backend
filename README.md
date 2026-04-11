@@ -237,6 +237,7 @@ LONG_TERM_MEMORY_MODEL=gpt-4o-mini
 LONG_TERM_MEMORY_EMBEDDER_MODEL=text-embedding-3-small
 
 # Observability
+LANGFUSE_TRACING_ENABLED=true
 LANGFUSE_PUBLIC_KEY=your_public_key
 LANGFUSE_SECRET_KEY=your_secret_key
 LANGFUSE_HOST=https://cloud.langfuse.com
