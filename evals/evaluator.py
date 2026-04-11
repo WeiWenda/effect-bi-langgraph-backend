@@ -103,7 +103,7 @@ class Evaluator:
             generate_report(self.report)
 
         logger.info(
-            "Evaluation completed",
+            "evaluation_completed",
             total_traces=self.report["total_traces"],
             successful_traces=self.report["successful_traces"],
             failed_traces=self.report["failed_traces"],
@@ -139,18 +139,28 @@ class Evaluator:
         """
         metric_name = metric["name"]
         if not metric:
-            logger.error(f"Metric {metric_name} not found")
+            logger.error("metric_not_found", metric_name=metric_name)
             return None
         system_metric_prompt = metric["prompt"]
 
         if not input or not output:
-            logger.error(f"Metric {metric_name} evaluation failed", input=input, output=output)
+            logger.error(
+                "metric_evaluation_failed_missing_io",
+                metric_name=metric_name,
+                has_input=bool(input),
+                has_output=bool(output),
+            )
             return None
         score = await self._call_openai(system_metric_prompt, input, output)
         if score:
-            logger.info(f"Metric {metric_name} evaluation completed successfully", score=score)
+            logger.info(
+                "metric_evaluation_completed",
+                metric_name=metric_name,
+                score=score.score,
+                reasoning=score.reasoning,
+            )
         else:
-            logger.error(f"Metric {metric_name} evaluation failed")
+            logger.error("metric_evaluation_failed", metric_name=metric_name)
         return score
 
     async def _call_openai(self, metric_system_prompt: str, input: str, output: str) -> ScoreSchema | None:
@@ -178,7 +188,11 @@ class Evaluator:
                 return response.choices[0].message.parsed
             except Exception as e:
                 SLEEP_TIME = 10
-                logger.error("Error calling OpenAI", error=str(e), sleep_time=SLEEP_TIME)
+                logger.error(
+                    "openai_evaluation_call_failed",
+                    error=str(e),
+                    sleep_seconds=SLEEP_TIME,
+                )
                 sleep(SLEEP_TIME)
                 continue
         return None
@@ -198,5 +212,5 @@ class Evaluator:
             traces_without_scores = [trace for trace in traces if not trace.scores]
             return traces_without_scores
         except Exception as e:
-            logger.error("Error fetching traces", error=str(e))
+            logger.error("langfuse_traces_fetch_failed", error=str(e))
             return []

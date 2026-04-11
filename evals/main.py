@@ -183,7 +183,7 @@ async def run_evaluation(generate_report: bool = True) -> None:
 
     except Exception as e:
         print_error(f"Evaluation failed: {str(e)}")
-        logger.error("Evaluation failed", error=str(e))
+        logger.error("evaluation_failed", error=str(e))
         sys.exit(1)
 
 
