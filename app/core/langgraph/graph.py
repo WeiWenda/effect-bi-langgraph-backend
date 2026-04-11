@@ -376,12 +376,8 @@ class LangGraphAgent:
                 config,
                 stream_mode="messages",
             ):
-                try:
+                if isinstance(token.content, str) and token.content:
                     yield token.content
-                except Exception as token_error:
-                    logger.error("Error processing token", error=str(token_error), session_id=session_id)
-                    # Continue with next token even if current one fails
-                    continue
 
             # After streaming completes, get final state and update memory in background
             state: StateSnapshot = await sync_to_async(self._graph.get_state)(config=config)
