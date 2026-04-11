@@ -14,6 +14,7 @@ from langchain_core.messages import (
     convert_to_openai_messages,
 )
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.errors import GraphInterrupt
 from langgraph.graph import (
     END,
     StateGraph,
@@ -25,6 +26,7 @@ from langgraph.graph.state import (
 from langgraph.types import (
     RunnableConfig,
     StateSnapshot,
+    interrupt,
 )
 from psycopg_pool import AsyncConnectionPool
 
@@ -32,17 +34,17 @@ from app.core.config import (
     Environment,
     settings,
 )
-from app.core.observability import langfuse_callback_handler
 from app.core.langgraph.tools import tools
-from app.services.memory import memory_service
 from app.core.logging import logger
 from app.core.metrics import llm_inference_duration_seconds
+from app.core.observability import langfuse_callback_handler
 from app.core.prompts import load_system_prompt
 from app.schemas import (
     GraphState,
     Message,
 )
 from app.services.llm import llm_service
+from app.services.memory import memory_service
 from app.utils import (
     dump_messages,
     prepare_messages,
@@ -239,8 +241,8 @@ class LangGraphAgent:
 
         Args:
             messages (list[Message]): The messages to send to the LLM.
-            session_id (str): The session ID for Langfuse tracking.
-            user_id (Optional[str]): The user ID for Langfuse tracking.
+            session_id (str): The session ID for the conversation.
+            user_id (Optional[str]): The user ID for the conversation.
 
         Returns:
             list[dict]: The response from the LLM.
@@ -257,21 +259,40 @@ class LangGraphAgent:
                 "debug": settings.DEBUG,
             },
         }
-        relevant_memory = (
-            await memory_service.search(user_id, messages[-1].content)
-        ) or "No relevant memory found."
+
         try:
-            response = await self._graph.ainvoke(
-                input={"messages": dump_messages(messages), "long_term_memory": relevant_memory},
-                config=config,
-            )
-            # Run memory update in background without blocking the response
-            asyncio.create_task(
-                memory_service.add(
-                    user_id, convert_to_openai_messages(response["messages"]), config["metadata"]
+            state = await self._graph.aget_state(config)
+            if state.next:
+                logger.info("resuming_interrupted_graph", session_id=session_id, next_nodes=state.next)
+                response = await self._graph.ainvoke(
+                    Command(resume=messages[-1].content),
+                    config=config,
                 )
+            else:
+                relevant_memory = (
+                    await memory_service.search(user_id, messages[-1].content)
+                ) or "No relevant memory found."
+                response = await self._graph.ainvoke(
+                    input={"messages": dump_messages(messages), "long_term_memory": relevant_memory},
+                    config=config,
+                )
+
+            # Check if the graph was interrupted during this invocation
+            state = await self._graph.aget_state(config)
+            if state.next:
+                interrupt_value = state.tasks[0].interrupts[0].value if state.tasks else "Waiting for input."
+                logger.info("graph_interrupted", session_id=session_id, interrupt_value=str(interrupt_value))
+                return [Message(role="assistant", content=str(interrupt_value))]
+
+            asyncio.create_task(
+                memory_service.add(user_id, convert_to_openai_messages(response["messages"]), config["metadata"])
             )
             return self.__process_messages(response["messages"])
+        except GraphInterrupt:
+            state = await self._graph.aget_state(config)
+            interrupt_value = state.tasks[0].interrupts[0].value if state.tasks else "Waiting for input."
+            logger.info("graph_interrupted", session_id=session_id, interrupt_value=str(interrupt_value))
+            return [Message(role="assistant", content=str(interrupt_value))]
         except Exception as e:
             logger.exception("get_response_failed", error=str(e), session_id=session_id)
             raise
@@ -302,29 +323,44 @@ class LangGraphAgent:
         if self._graph is None:
             self._graph = await self.create_graph()
 
-        relevant_memory = (
-            await memory_service.search(user_id, messages[-1].content)
-        ) or "No relevant memory found."
-
         try:
+            state = await self._graph.aget_state(config)
+            if state.next:
+                logger.info("resuming_interrupted_graph_stream", session_id=session_id, next_nodes=state.next)
+                graph_input = Command(resume=messages[-1].content)
+            else:
+                relevant_memory = (
+                    await memory_service.search(user_id, messages[-1].content)
+                ) or "No relevant memory found."
+                graph_input = {"messages": dump_messages(messages), "long_term_memory": relevant_memory}
+
             async for token, _ in self._graph.astream(
-                {"messages": dump_messages(messages), "long_term_memory": relevant_memory},
+                graph_input,
                 config,
                 stream_mode="messages",
             ):
                 if isinstance(token.content, str) and token.content:
                     yield token.content
 
-            # After streaming completes, get final state and update memory in background
-            state: StateSnapshot = await sync_to_async(self._graph.get_state)(config=config)
-            if state.values and "messages" in state.values:
+            # After streaming completes, check for interrupt or update memory
+            state = await self._graph.aget_state(config)
+            if state.next:
+                interrupt_value = state.tasks[0].interrupts[0].value if state.tasks else "Waiting for input."
+                logger.info("graph_interrupted_stream", session_id=session_id, interrupt_value=str(interrupt_value))
+                yield str(interrupt_value)
+            elif state.values and "messages" in state.values:
                 asyncio.create_task(
                     memory_service.add(
                         user_id, convert_to_openai_messages(state.values["messages"]), config["metadata"]
                     )
                 )
+        except GraphInterrupt:
+            state = await self._graph.aget_state(config)
+            interrupt_value = state.tasks[0].interrupts[0].value if state.tasks else "Waiting for input."
+            logger.info("graph_interrupted_stream", session_id=session_id, interrupt_value=str(interrupt_value))
+            yield str(interrupt_value)
         except Exception as stream_error:
-            logger.error("Error in stream processing", error=str(stream_error), session_id=session_id)
+            logger.exception("stream_processing_failed", error=str(stream_error), session_id=session_id)
             raise stream_error
 
     async def get_chat_history(self, session_id: str) -> list[Message]:
