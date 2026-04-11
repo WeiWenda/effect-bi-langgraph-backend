@@ -338,7 +338,8 @@ class LangGraphAgent:
             )
             return self.__process_messages(response["messages"])
         except Exception as e:
-            logger.error(f"Error getting response: {str(e)}")
+            logger.exception("get_response_failed", error=str(e), session_id=session_id)
+            raise
 
     async def get_stream_response(
         self, messages: list[Message], session_id: str, user_id: Optional[str] = None
