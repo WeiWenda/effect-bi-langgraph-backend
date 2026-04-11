@@ -162,6 +162,7 @@ class LLMService:
         """Initialize the LLM service."""
         self._llm: Optional[BaseChatModel] = None
         self._current_model_index: int = 0
+        self._bound_tools: List = []
 
         # Find index of default model in registry
         all_names = LLMRegistry.get_all_names()
@@ -215,6 +216,8 @@ class LLMService:
 
             self._current_model_index = next_index
             self._llm = next_model_entry["llm"]
+            if self._bound_tools:
+                self._llm = self._llm.bind_tools(self._bound_tools)
 
             logger.info("model_switched", new_model=next_model_entry["name"], new_index=next_index)
             return True
@@ -360,6 +363,7 @@ class LLMService:
             Self for method chaining
         """
         if self._llm:
+            self._bound_tools = tools
             self._llm = self._llm.bind_tools(tools)
             logger.debug("tools_bound_to_llm", tool_count=len(tools))
         return self
