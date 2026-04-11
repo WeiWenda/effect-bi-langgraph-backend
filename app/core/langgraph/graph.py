@@ -26,7 +26,6 @@ from langgraph.graph.state import (
 from langgraph.types import (
     RunnableConfig,
     StateSnapshot,
-    interrupt,
 )
 from psycopg_pool import AsyncConnectionPool
 
@@ -407,11 +406,23 @@ class LangGraphAgent:
                 for table in settings.CHECKPOINT_TABLES:
                     try:
                         await conn.execute(f"DELETE FROM {table} WHERE thread_id = %s", (session_id,))
-                        logger.info(f"Cleared {table} for session {session_id}")
+                        logger.info(
+                            "checkpoint_table_cleared_for_session",
+                            table=table,
+                            session_id=session_id,
+                        )
                     except Exception as e:
-                        logger.error(f"Error clearing {table}", error=str(e))
+                        logger.error(
+                            "checkpoint_table_clear_failed",
+                            table=table,
+                            error=str(e),
+                        )
                         raise
 
         except Exception as e:
-            logger.error("Failed to clear chat history", error=str(e))
+            logger.error(
+                "clear_chat_history_operation_failed",
+                session_id=session_id,
+                error=str(e),
+            )
             raise

@@ -193,5 +193,5 @@ def generate_report(report: Dict[str, Any]) -> str:
     # Add the report path to the report data for reference
     report["generate_report_path"] = report_path
 
-    logger.info("Evaluation report generated", report_path=report_path)
+    logger.info("evaluation_report_generated", report_path=report_path)
     return report_path

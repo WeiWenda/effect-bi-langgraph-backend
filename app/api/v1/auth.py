@@ -92,7 +92,7 @@ async def get_current_user(
 
         return user
     except ValueError as ve:
-        logger.error("token_validation_failed", error=str(ve), exc_info=True)
+        logger.exception("token_validation_failed", error=str(ve))
         raise HTTPException(
             status_code=422,
             detail="Invalid token format",
@@ -145,7 +145,7 @@ async def get_current_session(
 
         return session
     except ValueError as ve:
-        logger.error("token_validation_failed", error=str(ve), exc_info=True)
+        logger.exception("token_validation_failed", error=str(ve))
         raise HTTPException(
             status_code=422,
             detail="Invalid token format",
@@ -185,7 +185,7 @@ async def register_user(request: Request, user_data: UserCreate):
 
         return UserResponse(id=user.id, email=user.email, token=token)
     except ValueError as ve:
-        logger.error("user_registration_validation_failed", error=str(ve), exc_info=True)
+        logger.exception("user_registration_validation_failed", error=str(ve))
         raise HTTPException(status_code=422, detail=str(ve))
 
 
@@ -232,7 +232,7 @@ async def login(
         token = create_access_token(str(user.id))
         return TokenResponse(access_token=token.access_token, token_type="bearer", expires_at=token.expires_at)
     except ValueError as ve:
-        logger.error("login_validation_failed", error=str(ve), exc_info=True)
+        logger.exception("login_validation_failed", error=str(ve))
         raise HTTPException(status_code=422, detail=str(ve))
 
 
@@ -266,7 +266,7 @@ async def create_session(user: User = Depends(get_current_user)):
 
         return SessionResponse(session_id=session_id, name=session.name, token=token)
     except ValueError as ve:
-        logger.error("session_creation_validation_failed", error=str(ve), user_id=user.id, exc_info=True)
+        logger.exception("session_creation_validation_failed", error=str(ve), user_id=user.id)
         raise HTTPException(status_code=422, detail=str(ve))
 
 
@@ -302,7 +302,7 @@ async def update_session_name(
 
         return SessionResponse(session_id=sanitized_session_id, name=session.name, token=token)
     except ValueError as ve:
-        logger.error("session_update_validation_failed", error=str(ve), session_id=session_id, exc_info=True)
+        logger.exception("session_update_validation_failed", error=str(ve), session_id=session_id)
         raise HTTPException(status_code=422, detail=str(ve))
 
 
@@ -331,7 +331,7 @@ async def delete_session(session_id: str, current_session: Session = Depends(get
 
         logger.info("session_deleted", session_id=session_id, user_id=current_session.user_id)
     except ValueError as ve:
-        logger.error("session_deletion_validation_failed", error=str(ve), session_id=session_id, exc_info=True)
+        logger.exception("session_deletion_validation_failed", error=str(ve), session_id=session_id)
         raise HTTPException(status_code=422, detail=str(ve))
 
 
@@ -356,5 +356,5 @@ async def get_user_sessions(user: User = Depends(get_current_user)):
             for session in sessions
         ]
     except ValueError as ve:
-        logger.error("get_sessions_validation_failed", user_id=user.id, error=str(ve), exc_info=True)
+        logger.exception("get_sessions_validation_failed", user_id=user.id, error=str(ve))
         raise HTTPException(status_code=422, detail=str(ve))
