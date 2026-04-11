@@ -2,6 +2,42 @@
 
 This document provides essential guidelines for AI agents working on this LangGraph FastAPI Agent project.
 
+## Quick Commands
+
+```bash
+make install          # Install deps (uv sync)
+make dev              # Dev server with hot reload (port 8000)
+make lint             # ruff check .
+make format           # ruff format .
+make eval             # Run LLM evals (interactive)
+make eval-quick       # Run LLM evals (default settings)
+make docker-run       # Docker: API + DB (development)
+make docker-compose-up ENV=development  # Full stack: API + Prometheus + Grafana
+```
+
+## Project Structure
+
+```
+app/
+  api/v1/          # Route handlers (auth.py, chatbot.py, api.py)
+  core/
+    config.py      # Pydantic Settings config
+    database.py    # Async DB setup
+    langgraph/     # LangGraph agent graph + tools
+    logging.py     # structlog setup
+    llm.py         # LLM service with retry logic
+    limiter.py     # Rate limiting (slowapi)
+    metrics.py     # Prometheus metrics
+    middleware.py  # ASGI middleware
+    prompts/       # System prompts
+  models/          # SQLModel ORM models
+  schemas/         # Pydantic request/response schemas + graph state
+  services/        # Business logic services
+  utils/           # Shared utilities
+evals/             # LLM evaluation framework (Langfuse-based)
+scripts/           # Environment setup, Docker build scripts
+```
+
 ## Project Overview
 
 This is a production-ready AI agent application built with:
