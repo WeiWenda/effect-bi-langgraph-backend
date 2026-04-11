@@ -341,14 +341,6 @@ The application uses uvloop for enhanced async performance (automatically enable
 
 - **Database**: Async connection pooling with configurable pool size
 - **LangGraph Checkpointing**: Shared connection pool for state persistence
-- **Redis** (optional): Connection pool for caching
-
-### Caching Strategy
-
-- Only successful responses are cached
-- Configurable TTL based on data volatility
-- Cache invalidation on updates
-- Supports Redis or in-memory caching
 
 ## 🔌 API Reference
 
