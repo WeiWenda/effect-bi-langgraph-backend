@@ -418,6 +418,12 @@ whatsapp-food-order/
 └── README.md                        # This file
 ```
 
+## 🔮 Roadmap
+
+- **Multi-LLM provider support** — Switch between OpenAI, Anthropic, Google Gemini, and OpenRouter via a single `DEFAULT_LLM_MODEL=provider:model` env variable, powered by LangChain's `init_chat_model`
+
+---
+
 ## 🛡️ Security
 
 For security concerns, please review our [Security Policy](SECURITY.md).
