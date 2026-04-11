@@ -32,7 +32,7 @@ from app.core.config import (
     Environment,
     settings,
 )
-from app.core.langfuse_init import langfuse_callback_handler
+from app.core.observability import langfuse_callback_handler
 from app.core.langgraph.tools import tools
 from app.services.memory import memory_service
 from app.core.logging import logger

@@ -21,7 +21,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.v1.api import api_router
 from app.core.config import settings
-from app.core.langfuse_init import langfuse_init
+from app.core.observability import langfuse_init
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.core.metrics import setup_metrics
