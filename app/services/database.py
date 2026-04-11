@@ -21,6 +21,7 @@ from app.core.config import (
 )
 from app.core.logging import logger
 from app.models.session import Session as ChatSession
+from app.models.thread import Thread
 from app.models.user import User
 
 
