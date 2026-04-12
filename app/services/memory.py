@@ -44,6 +44,15 @@ class MemoryService:
             )
         return self._memory
 
+    async def initialize(self) -> None:
+        """Pre-warm the mem0 AsyncMemory instance and its pgvector connection pool.
+
+        Call once at startup so the first search() or add() doesn't pay the
+        ~130ms from_config + pgvector.list_cols() cold-init cost.
+        """
+        await self._get_memory()
+        logger.info("memory_service_initialized")
+
     async def search(self, user_id: str, query: str) -> str:
         """Search relevant memories for a user.
 
