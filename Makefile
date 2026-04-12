@@ -1,47 +1,85 @@
+.DEFAULT_GOAL := help
+
+DOCKER_COMPOSE ?= docker-compose
+ENV            ?= development
+VALID_ENVS     := development staging production test
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+define check_env
+	@if ! echo "$(VALID_ENVS)" | grep -qw "$(ENV)"; then \
+		echo "Invalid ENV=$(ENV). Must be one of: $(VALID_ENVS)"; exit 1; \
+	fi
+endef
+
+define load_env_file
+	$(call check_env)
+	@ENV_FILE=.env.$(ENV); \
+	if [ ! -f $$ENV_FILE ]; then \
+		echo "Environment file $$ENV_FILE not found. Please create it."; exit 1; \
+	fi
+endef
+
+# Shorthand: source env vars then run a command
+run_with_env = bash -c "source scripts/set_env.sh $(ENV) && $(1)"
+
+# ---------------------------------------------------------------------------
+# Setup
+# ---------------------------------------------------------------------------
 install:
 	pip install uv
 	uv sync
 	uv run pre-commit install
 
-DOCKER_COMPOSE ?= docker-compose
-
-set-env:
-	@if [ -z "$(ENV)" ]; then \
-		echo "ENV is not set. Usage: make set-env ENV=development|staging|production"; \
-		exit 1; \
-	fi
-	@if [ "$(ENV)" != "development" ] && [ "$(ENV)" != "staging" ] && [ "$(ENV)" != "production" ] && [ "$(ENV)" != "test" ]; then \
-		echo "ENV is not valid. Must be one of: development, staging, production, test"; \
-		exit 1; \
-	fi
-	@echo "Setting environment to $(ENV)"
-	@bash -c "source scripts/set_env.sh $(ENV)"
-
-prod:
-	@echo "Starting server in production environment"
-	@bash -c "source scripts/set_env.sh production && ./.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop uvloop"
+# ---------------------------------------------------------------------------
+# Server
+# ---------------------------------------------------------------------------
+dev:
+	@$(call run_with_env,uv run uvicorn app.main:app --reload --port 8000)
 
 staging:
-	@echo "Starting server in staging environment"
-	@bash -c "source scripts/set_env.sh staging && ./.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop uvloop"
+	@$(call run_with_env,$(MAKE) _serve ENV=staging)
 
-dev:
-	@echo "Starting server in development environment"
-	@bash -c "source scripts/set_env.sh development && uv run uvicorn app.main:app --reload --port 8000"
+prod:
+	@$(call run_with_env,$(MAKE) _serve ENV=production)
 
-# Evaluation commands
+_serve:
+	@$(call run_with_env,./.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop uvloop)
+
+# ---------------------------------------------------------------------------
+# Database migrations
+# ---------------------------------------------------------------------------
+migrate:
+	@$(call run_with_env,uv run alembic upgrade head)
+
+migration:
+	@if [ -z "$(MSG)" ]; then \
+		echo "Usage: make migration MSG=\"describe your change\""; exit 1; \
+	fi
+	@$(call run_with_env,uv run alembic revision --autogenerate -m '$(MSG)')
+
+migrate-downgrade:
+	@$(call run_with_env,uv run alembic downgrade -1)
+
+migrate-history:
+	@$(call run_with_env,uv run alembic history --verbose)
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
 eval:
-	@echo "Running evaluation with interactive mode"
-	@bash -c "source scripts/set_env.sh ${ENV:-development} && python -m evals.main --interactive"
+	@$(call run_with_env,python -m evals.main --interactive)
 
 eval-quick:
-	@echo "Running evaluation with default settings"
-	@bash -c "source scripts/set_env.sh ${ENV:-development} && python -m evals.main --quick"
+	@$(call run_with_env,python -m evals.main --quick)
 
 eval-no-report:
-	@echo "Running evaluation without generating report"
-	@bash -c "source scripts/set_env.sh ${ENV:-development} && python -m evals.main --no-report"
+	@$(call run_with_env,python -m evals.main --no-report)
 
+# ---------------------------------------------------------------------------
+# Code quality
+# ---------------------------------------------------------------------------
 lint:
 	ruff check .
 
@@ -54,144 +92,95 @@ pre-commit:
 pre-commit-update:
 	uv run pre-commit autoupdate
 
-clean:
-	rm -rf .venv
-	rm -rf __pycache__
-	rm -rf .pytest_cache
-
+# ---------------------------------------------------------------------------
+# Docker — single service (API + DB)
+# ---------------------------------------------------------------------------
 docker-build:
-	docker build -t fastapi-langgraph-template .
-
-docker-build-env:
-	@if [ -z "$(ENV)" ]; then \
-		echo "ENV is not set. Usage: make docker-build-env ENV=development|staging|production"; \
-		exit 1; \
-	fi
-	@if [ "$(ENV)" != "development" ] && [ "$(ENV)" != "staging" ] && [ "$(ENV)" != "production" ]; then \
-		echo "ENV is not valid. Must be one of: development, staging, production"; \
-		exit 1; \
-	fi
+	$(call check_env)
 	@./scripts/build-docker.sh $(ENV)
 
-docker-run:
-	@ENV_FILE=.env.development; \
-	if [ ! -f $$ENV_FILE ]; then \
-		echo "Environment file $$ENV_FILE not found. Please create it."; \
-		exit 1; \
-	fi; \
-	APP_ENV=development $(DOCKER_COMPOSE) --env-file $$ENV_FILE up -d --build db app
+docker-up:
+	$(call load_env_file)
+	@APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file .env.$(ENV) up -d --build db app
 
-docker-run-env:
-	@if [ -z "$(ENV)" ]; then \
-		echo "ENV is not set. Usage: make docker-run-env ENV=development|staging|production"; \
-		exit 1; \
-	fi
-	@if [ "$(ENV)" != "development" ] && [ "$(ENV)" != "staging" ] && [ "$(ENV)" != "production" ]; then \
-		echo "ENV is not valid. Must be one of: development, staging, production"; \
-		exit 1; \
-	fi
-	@ENV_FILE=.env.$(ENV); \
-	if [ ! -f $$ENV_FILE ]; then \
-		echo "Environment file $$ENV_FILE not found. Please create it."; \
-		exit 1; \
-	fi; \
-	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE up -d --build db app
-	# @./scripts/ensure-db-user.sh $(ENV)
+docker-down:
+	$(call load_env_file)
+	@APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file .env.$(ENV) down
 
 docker-logs:
-	@if [ -z "$(ENV)" ]; then \
-		echo "ENV is not set. Usage: make docker-logs ENV=development|staging|production"; \
-		exit 1; \
-	fi
-	@if [ "$(ENV)" != "development" ] && [ "$(ENV)" != "staging" ] && [ "$(ENV)" != "production" ]; then \
-		echo "ENV is not valid. Must be one of: development, staging, production"; \
-		exit 1; \
-	fi
-	@ENV_FILE=.env.$(ENV); \
-	if [ ! -f $$ENV_FILE ]; then \
-		echo "Environment file $$ENV_FILE not found. Please create it."; \
-		exit 1; \
-	fi; \
-	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE logs -f app db
+	$(call load_env_file)
+	@APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file .env.$(ENV) logs -f app db
 
-docker-stop:
-	@if [ -z "$(ENV)" ]; then \
-		echo "ENV is not set. Usage: make docker-stop ENV=development|staging|production"; \
-		exit 1; \
-	fi
-	@if [ "$(ENV)" != "development" ] && [ "$(ENV)" != "staging" ] && [ "$(ENV)" != "production" ]; then \
-		echo "ENV is not valid. Must be one of: development, staging, production"; \
-		exit 1; \
-	fi
-	@ENV_FILE=.env.$(ENV); \
-	if [ ! -f $$ENV_FILE ]; then \
-		echo "Environment file $$ENV_FILE not found. Please create it."; \
-		exit 1; \
-	fi; \
-	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE down
+# ---------------------------------------------------------------------------
+# Docker — full stack (API + DB + Prometheus + Grafana)
+# ---------------------------------------------------------------------------
+stack-up:
+	$(call load_env_file)
+	@APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file .env.$(ENV) up -d
 
-# Docker Compose commands for the entire stack
-docker-compose-up:
-	@if [ -z "$(ENV)" ]; then \
-		echo "ENV is not set. Usage: make docker-compose-up ENV=development|staging|production"; \
-		exit 1; \
-	fi
-	@if [ "$(ENV)" != "development" ] && [ "$(ENV)" != "staging" ] && [ "$(ENV)" != "production" ]; then \
-		echo "ENV is not valid. Must be one of: development, staging, production"; \
-		exit 1; \
-	fi
-	@ENV_FILE=.env.$(ENV); \
-	if [ ! -f $$ENV_FILE ]; then \
-		echo "Environment file $$ENV_FILE not found. Please create it."; \
-		exit 1; \
-	fi; \
-	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE up -d
+stack-down:
+	$(call load_env_file)
+	@APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file .env.$(ENV) down
 
-docker-compose-down:
-	@if [ -z "$(ENV)" ]; then \
-		echo "ENV is not set. Usage: make docker-compose-down ENV=development|staging|production"; \
-		exit 1; \
-	fi
-	@ENV_FILE=.env.$(ENV); \
-	if [ ! -f $$ENV_FILE ]; then \
-		echo "Environment file $$ENV_FILE not found. Please create it."; \
-		exit 1; \
-	fi; \
-	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE down
+stack-logs:
+	$(call load_env_file)
+	@APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file .env.$(ENV) logs -f
 
-docker-compose-logs:
-	@if [ -z "$(ENV)" ]; then \
-		echo "ENV is not set. Usage: make docker-compose-logs ENV=development|staging|production"; \
-		exit 1; \
-	fi
-	@ENV_FILE=.env.$(ENV); \
-	if [ ! -f $$ENV_FILE ]; then \
-		echo "Environment file $$ENV_FILE not found. Please create it."; \
-		exit 1; \
-	fi; \
-	APP_ENV=$(ENV) $(DOCKER_COMPOSE) --env-file $$ENV_FILE logs -f
+# ---------------------------------------------------------------------------
+# Misc
+# ---------------------------------------------------------------------------
+clean:
+	rm -rf .venv __pycache__ .pytest_cache
 
+# ---------------------------------------------------------------------------
 # Help
+# ---------------------------------------------------------------------------
 help:
-	@echo "Usage: make <target>"
-	@echo "Targets:"
-	@echo "  install: Install dependencies"
-	@echo "  set-env ENV=<environment>: Set environment variables (development, staging, production, test)"
-	@echo "  run ENV=<environment>: Set environment and run server"
-	@echo "  prod: Run server in production environment"
-	@echo "  staging: Run server in staging environment"
-	@echo "  dev: Run server in development environment"
-	@echo "  eval: Run evaluation with interactive mode"
-	@echo "  eval-quick: Run evaluation with default settings"
-	@echo "  eval-no-report: Run evaluation without generating report"
-	@echo "  test: Run tests"
-	@echo "  clean: Clean up"
-	@echo "  docker-build: Build default Docker image"
-	@echo "  docker-build-env ENV=<environment>: Build Docker image for specific environment"
-	@echo "  docker-run: Run default Docker container"
-	@echo "  docker-run-env ENV=<environment>: Run Docker container for specific environment"
-	@echo "  docker-logs ENV=<environment>: View logs from running container"
-	@echo "  docker-stop ENV=<environment>: Stop and remove container"
-	@echo "  docker-compose-up: Start the entire stack (API, Prometheus, Grafana)"
-	@echo "  docker-compose-down: Stop the entire stack"
-	@echo "  docker-compose-logs: View logs from all services"
+	@echo "Usage: make <target> [ENV=development|staging|production|test]"
+	@echo ""
+	@echo "Setup:"
+	@echo "  install              Install deps, set up pre-commit hooks"
+	@echo ""
+	@echo "Server:"
+	@echo "  dev                  Dev server with hot reload (port 8000)"
+	@echo "  staging              Staging server"
+	@echo "  prod                 Production server"
+	@echo ""
+	@echo "Database:"
+	@echo "  migrate              Run migrations to latest (default ENV=development)"
+	@echo "  migration MSG=...    Generate migration from model changes"
+	@echo "  migrate-downgrade    Rollback last migration"
+	@echo "  migrate-history      Show migration history"
+	@echo ""
+	@echo "Evaluation:"
+	@echo "  eval                 Run evals (interactive)"
+	@echo "  eval-quick           Run evals (default settings)"
+	@echo "  eval-no-report       Run evals without report"
+	@echo ""
+	@echo "Code quality:"
+	@echo "  lint                 Ruff lint check"
+	@echo "  format               Ruff format"
+	@echo "  pre-commit           Run all pre-commit hooks"
+	@echo "  pre-commit-update    Update pre-commit hook versions"
+	@echo ""
+	@echo "Docker (API + DB):"
+	@echo "  docker-build         Build Docker image"
+	@echo "  docker-up            Start API + DB containers"
+	@echo "  docker-down          Stop containers"
+	@echo "  docker-logs          Tail container logs"
+	@echo ""
+	@echo "Docker (full stack — includes Prometheus + Grafana):"
+	@echo "  stack-up             Start entire stack"
+	@echo "  stack-down           Stop entire stack"
+	@echo "  stack-logs           Tail all service logs"
+	@echo ""
+	@echo "Misc:"
+	@echo "  clean                Remove .venv, __pycache__, .pytest_cache"
+
+.PHONY: install dev staging prod _serve \
+        migrate migration migrate-downgrade migrate-history \
+        eval eval-quick eval-no-report \
+        lint format pre-commit pre-commit-update \
+        docker-build docker-up docker-down docker-logs \
+        stack-up stack-down stack-logs \
+        clean help

@@ -10,7 +10,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import QueuePool
 from sqlmodel import (
     Session,
-    SQLModel,
     create_engine,
     select,
 )
@@ -21,7 +20,6 @@ from app.core.config import (
 )
 from app.core.logging import logger
 from app.models.session import Session as ChatSession
-from app.models.thread import Thread
 from app.models.user import User
 
 
@@ -54,9 +52,6 @@ class DatabaseService:
                 pool_timeout=30,  # Connection timeout (seconds)
                 pool_recycle=1800,  # Recycle connections after 30 minutes
             )
-
-            # Create tables (only if they don't exist)
-            SQLModel.metadata.create_all(self.engine)
 
             logger.info(
                 "database_initialized",
