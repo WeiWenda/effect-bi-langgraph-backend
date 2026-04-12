@@ -199,13 +199,13 @@ async def register_user(request: Request, user_data: UserCreate):
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(settings.RATE_LIMIT_ENDPOINTS["login"][0])
 async def login(
-    request: Request, username: str = Form(...), password: str = Form(...), grant_type: str = Form(default="password")
+    request: Request, email: str = Form(...), password: str = Form(...), grant_type: str = Form(default="password")
 ):
     """Login a user.
 
     Args:
         request: The FastAPI request object for rate limiting.
-        username: User's email
+        email: User's email
         password: User's password
         grant_type: Must be "password"
 
@@ -217,7 +217,7 @@ async def login(
     """
     try:
         # Sanitize inputs
-        username = sanitize_string(username)
+        email = sanitize_string(email)
         password = sanitize_string(password)
         grant_type = sanitize_string(grant_type)
 
@@ -228,7 +228,7 @@ async def login(
                 detail="Unsupported grant type. Must be 'password'",
             )
 
-        user = await db_service.get_user_by_email(username)
+        user = await db_service.get_user_by_email(email)
         if not user or not user.verify_password(password):
             raise HTTPException(
                 status_code=401,
