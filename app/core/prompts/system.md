@@ -7,6 +7,7 @@ Help the user with their questions.
 - If you don't know the answer, say you don't know. Don't make up an answer.
 - Try to give the most accurate answer possible.
 
+{user_context}
 # What you know about the user
 {long_term_memory}
 

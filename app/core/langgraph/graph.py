@@ -127,7 +127,8 @@ class LangGraphAgent:
             else settings.DEFAULT_LLM_MODEL
         )
 
-        SYSTEM_PROMPT = load_system_prompt(long_term_memory=state.long_term_memory)
+        username = config.get("metadata", {}).get("username")
+        SYSTEM_PROMPT = load_system_prompt(username=username, long_term_memory=state.long_term_memory)
 
         # Prepare messages with system prompt
         messages = prepare_messages(state.messages, SYSTEM_PROMPT)
@@ -241,6 +242,7 @@ class LangGraphAgent:
         messages: list[Message],
         session_id: str,
         user_id: Optional[str] = None,
+        username: Optional[str] = None,
     ) -> list[dict]:
         """Get a response from the LLM.
 
@@ -248,6 +250,7 @@ class LangGraphAgent:
             messages (list[Message]): The messages to send to the LLM.
             session_id (str): The session ID for the conversation.
             user_id (Optional[str]): The user ID for the conversation.
+            username (Optional[str]): The display name of the user.
 
         Returns:
             list[dict]: The response from the LLM.
@@ -260,6 +263,7 @@ class LangGraphAgent:
             "callbacks": callbacks,
             "metadata": {
                 "user_id": user_id,
+                "username": username,
                 "session_id": session_id,
                 "environment": settings.ENVIRONMENT.value,
                 "debug": settings.DEBUG,
@@ -307,7 +311,11 @@ class LangGraphAgent:
             raise
 
     async def get_stream_response(
-        self, messages: list[Message], session_id: str, user_id: Optional[str] = None
+        self,
+        messages: list[Message],
+        session_id: str,
+        user_id: Optional[str] = None,
+        username: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """Get a stream response from the LLM.
 
@@ -315,6 +323,7 @@ class LangGraphAgent:
             messages (list[Message]): The messages to send to the LLM.
             session_id (str): The session ID for the conversation.
             user_id (Optional[str]): The user ID for the conversation.
+            username (Optional[str]): The display name of the user.
 
         Yields:
             str: Tokens of the LLM response.
@@ -325,6 +334,7 @@ class LangGraphAgent:
             "callbacks": callbacks,
             "metadata": {
                 "user_id": user_id,
+                "username": username,
                 "session_id": session_id,
                 "environment": settings.ENVIRONMENT.value,
                 "debug": settings.DEBUG,
