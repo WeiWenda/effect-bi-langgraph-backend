@@ -3,6 +3,7 @@
 from typing import (
     TYPE_CHECKING,
     List,
+    Optional,
 )
 
 import bcrypt
@@ -24,6 +25,7 @@ class User(BaseModel, table=True):
         id: The primary key
         email: User's email (unique)
         hashed_password: Bcrypt hashed password
+        username: Optional display name for the user
         created_at: When the user was created
         sessions: Relationship to user's chat sessions
     """
@@ -31,6 +33,7 @@ class User(BaseModel, table=True):
     id: int = Field(default=None, primary_key=True)
     email: str = Field(unique=True, index=True)
     hashed_password: str
+    username: Optional[str] = Field(default=None, index=False)
     sessions: List["Session"] = Relationship(back_populates="user")
 
     def verify_password(self, password: str) -> bool:

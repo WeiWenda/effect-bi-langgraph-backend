@@ -48,10 +48,12 @@ class UserCreate(BaseModel):
     Attributes:
         email: User's email address
         password: User's password
+        username: Optional display name
     """
 
     email: EmailStr = Field(..., description="User's email address")
     password: SecretStr = Field(..., description="User's password", min_length=8, max_length=64)
+    username: str | None = Field(default=None, description="Optional display name", max_length=50)
 
     @field_validator("password")
     @classmethod
@@ -94,11 +96,13 @@ class UserResponse(BaseResponse):
     Attributes:
         id: User's ID
         email: User's email address
+        username: Optional display name
         token: Authentication token
     """
 
     id: int = Field(..., description="User's ID")
     email: str = Field(..., description="User's email address")
+    username: str | None = Field(default=None, description="Optional display name")
     token: Token = Field(..., description="Authentication token")
 
 

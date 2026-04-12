@@ -177,13 +177,20 @@ async def register_user(request: Request, user_data: UserCreate):
         if await db_service.get_user_by_email(sanitized_email):
             raise HTTPException(status_code=400, detail="Email already registered")
 
+        # Sanitize optional username
+        sanitized_username = sanitize_string(user_data.username) if user_data.username else None
+
         # Create user
-        user = await db_service.create_user(email=sanitized_email, password=User.hash_password(password))
+        user = await db_service.create_user(
+            email=sanitized_email,
+            password=User.hash_password(password),
+            username=sanitized_username,
+        )
 
         # Create access token
         token = create_access_token(str(user.id))
 
-        return UserResponse(id=user.id, email=user.email, token=token)
+        return UserResponse(id=user.id, email=user.email, username=user.username, token=token)
     except ValueError as ve:
         logger.exception("user_registration_validation_failed", error=str(ve))
         raise HTTPException(status_code=422, detail=str(ve))
@@ -250,8 +257,8 @@ async def create_session(user: User = Depends(get_current_user)):
         # Generate a unique session ID
         session_id = str(uuid.uuid4())
 
-        # Create session in database
-        session = await db_service.create_session(session_id, user.id)
+        # Create session in database, copying username for LLM personalization
+        session = await db_service.create_session(session_id, user.id, username=user.username)
 
         # Create access token for the session
         token = create_access_token(session_id)

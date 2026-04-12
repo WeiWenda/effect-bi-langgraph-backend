@@ -70,18 +70,19 @@ class DatabaseService:
             if settings.ENVIRONMENT != Environment.PRODUCTION:
                 raise
 
-    async def create_user(self, email: str, password: str) -> User:
+    async def create_user(self, email: str, password: str, username: str | None = None) -> User:
         """Create a new user.
 
         Args:
             email: User's email address
             password: Hashed password
+            username: Optional display name
 
         Returns:
             User: The created user
         """
         with Session(self.engine) as session:
-            user = User(email=email, hashed_password=password)
+            user = User(email=email, hashed_password=password, username=username)
             session.add(user)
             session.commit()
             session.refresh(user)
@@ -134,19 +135,22 @@ class DatabaseService:
             logger.info("user_deleted", email=email)
             return True
 
-    async def create_session(self, session_id: str, user_id: int, name: str = "") -> ChatSession:
+    async def create_session(
+        self, session_id: str, user_id: int, name: str = "", username: str | None = None
+    ) -> ChatSession:
         """Create a new chat session.
 
         Args:
             session_id: The ID for the new session
             user_id: The ID of the user who owns the session
             name: Optional name for the session (defaults to empty string)
+            username: Display name copied from the user for LLM personalization
 
         Returns:
             ChatSession: The created session
         """
         with Session(self.engine) as session:
-            chat_session = ChatSession(id=session_id, user_id=user_id, name=name)
+            chat_session = ChatSession(id=session_id, user_id=user_id, name=name, username=username)
             session.add(chat_session)
             session.commit()
             session.refresh(chat_session)
