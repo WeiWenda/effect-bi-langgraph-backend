@@ -20,8 +20,9 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.api.v1.api import api_router
+from app.api.v1.chatbot import agent
+from app.core.cache import cache_service
 from app.core.config import settings
-from app.core.observability import langfuse_init
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.core.metrics import setup_metrics
@@ -29,11 +30,13 @@ from app.core.middleware import (
     LoggingContextMiddleware,
     MetricsMiddleware,
 )
+from app.core.observability import langfuse_init
 from app.services.database import database_service
 
 # Load environment variables
 load_dotenv()
 langfuse_init()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,7 +47,28 @@ async def lifespan(app: FastAPI):
         version=settings.VERSION,
         api_prefix=settings.API_V1_STR,
     )
+
+    # Initialize cache service (connects to Valkey if configured)
+    try:
+        await cache_service.initialize()
+    except Exception as e:
+        logger.exception("cache_initialization_failed", error=str(e))
+
+    # Pre-warm the LangGraph agent: create graph + connection pool at startup
+    # to avoid cold-start latency on the first request
+    try:
+        await agent.create_graph()
+        logger.info("graph_pre_warmed")
+    except Exception as e:
+        logger.exception("graph_pre_warm_failed", error=str(e))
+
     yield
+
+    # Cleanup on shutdown
+    await cache_service.close()
+    if agent._connection_pool:
+        await agent._connection_pool.close()
+        logger.info("connection_pool_closed")
     logger.info("application_shutdown")
 
 

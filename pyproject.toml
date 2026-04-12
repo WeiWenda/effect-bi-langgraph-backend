@@ -42,6 +42,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["black", "isort", "flake8", "ruff", "djlint==1.36.4"]
+cache = [
+    "redis>=7.4.0",
+    "valkey[libvalkey]>=6.1.0",
+]
 
 [dependency-groups]
 test = ["httpx>=0.28.1", "pytest>=8.3.5"]

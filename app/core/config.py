@@ -185,6 +185,14 @@ class Settings:
         self.POSTGRES_MAX_OVERFLOW = int(os.getenv("POSTGRES_MAX_OVERFLOW", "10"))
         self.CHECKPOINT_TABLES = ["checkpoint_blobs", "checkpoint_writes", "checkpoints"]
 
+        # Valkey/Redis Cache Configuration (optional — if host is set, caching is enabled)
+        self.VALKEY_HOST = os.getenv("VALKEY_HOST", "")
+        self.VALKEY_PORT = int(os.getenv("VALKEY_PORT", "6379"))
+        self.VALKEY_DB = int(os.getenv("VALKEY_DB", "0"))
+        self.VALKEY_PASSWORD = os.getenv("VALKEY_PASSWORD", "")
+        self.VALKEY_MAX_CONNECTIONS = int(os.getenv("VALKEY_MAX_CONNECTIONS", "20"))
+        self.CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "60"))
+
         # Rate Limiting Configuration
         self.RATE_LIMIT_DEFAULT = parse_list_from_env("RATE_LIMIT_DEFAULT", ["200 per day", "50 per hour"])
 

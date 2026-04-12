@@ -1,7 +1,11 @@
-"""Long-term memory service using mem0 and pgvector."""
+"""Long-term memory service using mem0 and pgvector with optional cache layer."""
 
 from mem0 import AsyncMemory
 
+from app.core.cache import (
+    cache_key,
+    cache_service,
+)
 from app.core.config import settings
 from app.core.logging import logger
 
@@ -10,6 +14,7 @@ class MemoryService:
     """Service for managing long-term memory using mem0 and pgvector."""
 
     def __init__(self):
+        """Initialize the memory service."""
         self._memory: AsyncMemory = None
 
     async def _get_memory(self) -> AsyncMemory:
@@ -42,12 +47,27 @@ class MemoryService:
     async def search(self, user_id: str, query: str) -> str:
         """Search relevant memories for a user.
 
+        Checks cache first; on miss, queries mem0 and caches the result.
+
         Returns formatted memory string, or empty string on failure.
         """
         try:
+            # Check cache first
+            key = cache_key("memory", str(user_id), query)
+            cached = await cache_service.get(key)
+            if cached is not None:
+                logger.debug("memory_search_cache_hit", user_id=user_id)
+                return cached
+
             memory = await self._get_memory()
             results = await memory.search(user_id=str(user_id), query=query)
-            return "\n".join([f"* {r['memory']}" for r in results["results"]])
+            result = "\n".join([f"* {r['memory']}" for r in results["results"]])
+
+            # Cache successful results
+            if result:
+                await cache_service.set(key, result)
+
+            return result
         except Exception as e:
             logger.error("failed_to_get_relevant_memory", error=str(e), user_id=user_id, query=query)
             return ""
