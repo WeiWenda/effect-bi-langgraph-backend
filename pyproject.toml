@@ -56,6 +56,10 @@ cache = [
 ]
 
 [dependency-groups]
+dev = [
+    "detect-secrets>=1.5.0",
+    "pre-commit>=4.5.1",
+]
 test = ["httpx>=0.28.1", "pytest>=8.3.5"]
 
 
