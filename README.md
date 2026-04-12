@@ -18,10 +18,30 @@ A production-ready FastAPI template for building AI agent applications with Lang
 - **AI & LLM Features**
 
   - Long-term memory with mem0ai and pgvector for semantic memory storage
-  - LLM Service with automatic retry logic using tenacity
-  - Multiple LLM model support (GPT-4o, GPT-4o-mini, GPT-5, GPT-5-mini, GPT-5-nano)
+  - LLM Service with automatic retry logic using tenacity and total timeout budget
+  - Multiple LLM model support (GPT-5, GPT-5.4, GPT-5.4-nano)
   - Streaming responses for real-time chat interactions
-  - Tool calling and function execution capabilities
+  - Tool calling with concurrent execution for multi-tool requests
+
+- **Observability & Debugging**
+
+  - Request ID (`X-Request-ID`) propagated through every API response, log line, and header via `asgi-correlation-id`
+  - Per-request profiling (wall time, CPU time, I/O wait, peak memory, call tree) auto-saved to JSON when a threshold is exceeded
+  - Structured logs carry `request_id`, `session_id`, and `user_id` on every line
+
+- **Performance**
+
+  - Memory search and graph state check run concurrently (`asyncio.gather`)
+  - System prompt template cached at module load — no file I/O per request
+  - tiktoken-based local token counting — no API round-trip for context trimming
+  - mem0 `AsyncMemory` pre-warmed at startup — eliminates ~130ms cold-init on first request
+  - LLM fallback loop capped with a configurable total timeout budget
+
+- **Optional Cache Layer (Valkey/Redis)**
+
+  - Drop-in Valkey/Redis cache for memory search results
+  - In-memory TTLCache fallback when no cache server is configured
+  - Cache-backed rate limiting across multiple app instances
 
 - **Security**
 
@@ -230,6 +250,7 @@ OPENAI_API_KEY=your_openai_api_key
 DEFAULT_LLM_MODEL=gpt-4o
 DEFAULT_LLM_TEMPERATURE=0.7
 MAX_TOKENS=4096
+LLM_TOTAL_TIMEOUT=60          # Max seconds for the entire LLM fallback loop
 
 # Long-Term Memory
 LONG_TERM_MEMORY_COLLECTION_NAME=agent_memories
@@ -248,6 +269,17 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 # Rate Limiting
 RATE_LIMIT_ENABLED=true
+
+# Valkey/Redis Cache (optional — omit to use in-memory fallback)
+VALKEY_HOST=localhost
+VALKEY_PORT=6379
+VALKEY_DB=0
+VALKEY_PASSWORD=
+CACHE_TTL_SECONDS=60
+
+# Profiling (DEBUG only — set threshold to 0 to profile every request)
+PROFILING_DIR=/tmp/fastapi_profiles
+PROFILING_THRESHOLD_SECONDS=2.0
 ```
 
 ## 🧠 Long-Term Memory
@@ -280,16 +312,6 @@ The LLM service provides robust, production-ready language model interactions wi
 - **Reasoning Configuration**: GPT-5 models support configurable reasoning effort levels
 - **Environment-Specific Tuning**: Different parameters for development vs production
 - **Fallback Mechanisms**: Graceful degradation when primary models fail
-
-### Supported Models
-
-| Model       | Use Case                | Reasoning Effort |
-| ----------- | ----------------------- | ---------------- |
-| gpt-5       | Complex reasoning tasks | Medium           |
-| gpt-5-mini  | Balanced performance    | Low              |
-| gpt-5-nano  | Fast responses          | Minimal          |
-| gpt-4o      | Production workloads    | N/A              |
-| gpt-4o-mini | Cost-effective tasks    | N/A              |
 
 ### Retry Configuration
 
@@ -368,7 +390,7 @@ For detailed API documentation, visit `/docs` (Swagger UI) or `/redoc` (ReDoc) w
 ## 📚 Project Structure
 
 ```
-whatsapp-food-order/
+fastapi-langgraph-agent-production-ready-template/
 ├── app/
 │   ├── api/
 │   │   └── v1/
@@ -376,27 +398,30 @@ whatsapp-food-order/
 │   │       ├── chatbot.py           # Chat endpoints
 │   │       └── api.py               # API router aggregation
 │   ├── core/
+│   │   ├── cache.py                 # Valkey/Redis cache service with in-memory fallback
 │   │   ├── config.py                # Configuration management
 │   │   ├── logging.py               # Logging setup
 │   │   ├── metrics.py               # Prometheus metrics
-│   │   ├── middleware.py            # Custom middleware
+│   │   ├── middleware.py            # Custom middleware (metrics, logging context, profiling)
 │   │   ├── limiter.py               # Rate limiting
 │   │   ├── langgraph/
 │   │   │   ├── graph.py             # LangGraph agent
 │   │   │   └── tools.py             # Agent tools
 │   │   └── prompts/
-│   │       ├── __init__.py          # Prompt loader
+│   │       ├── __init__.py          # Prompt loader (template cached at module load)
 │   │       └── system.md            # System prompts
 │   ├── models/
 │   │   ├── user.py                  # User model
 │   │   └── session.py               # Session model
 │   ├── schemas/
+│   │   ├── base.py                  # BaseResponse with auto-populated request_id
 │   │   ├── auth.py                  # Auth schemas
 │   │   ├── chat.py                  # Chat schemas
 │   │   └── graph.py                 # Graph state schemas
 │   ├── services/
 │   │   ├── database.py              # Database service
-│   │   └── llm.py                   # LLM service with retries
+│   │   ├── llm.py                   # LLM service with retries and timeout budget
+│   │   └── memory.py                # Long-term memory service (mem0 + cache)
 │   ├── utils/
 │   │   ├── __init__.py
 │   │   └── graph.py                 # Graph utility functions

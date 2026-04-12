@@ -11,6 +11,8 @@ from pydantic import (
     field_validator,
 )
 
+from app.schemas.base import BaseResponse
+
 
 class Token(BaseModel):
     """Token model for authentication.
@@ -26,7 +28,7 @@ class Token(BaseModel):
     expires_at: datetime = Field(..., description="The token expiration timestamp")
 
 
-class TokenResponse(BaseModel):
+class TokenResponse(BaseResponse):
     """Response model for login endpoint.
 
     Attributes:
@@ -86,7 +88,7 @@ class UserCreate(BaseModel):
         return v
 
 
-class UserResponse(BaseModel):
+class UserResponse(BaseResponse):
     """Response model for user operations.
 
     Attributes:
@@ -100,7 +102,7 @@ class UserResponse(BaseModel):
     token: Token = Field(..., description="Authentication token")
 
 
-class SessionResponse(BaseModel):
+class SessionResponse(BaseResponse):
     """Response model for session creation.
 
     Attributes:

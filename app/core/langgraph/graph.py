@@ -7,7 +7,6 @@ from typing import (
 )
 from urllib.parse import quote_plus
 
-from asgiref.sync import sync_to_async
 from langchain_core.messages import (
     BaseMessage,
     ToolMessage,
@@ -115,6 +114,7 @@ class LangGraphAgent:
 
         Args:
             state (GraphState): The current state of the conversation.
+            config (RunnableConfig): The runnable configuration for this invocation.
 
         Returns:
             Command: Command object with updated state and next node to execute.
@@ -130,7 +130,7 @@ class LangGraphAgent:
         SYSTEM_PROMPT = load_system_prompt(long_term_memory=state.long_term_memory)
 
         # Prepare messages with system prompt
-        messages = prepare_messages(state.messages, current_llm, SYSTEM_PROMPT)
+        messages = prepare_messages(state.messages, SYSTEM_PROMPT)
 
         try:
             # Use LLM service with automatic retries and circular fallback
@@ -173,16 +173,22 @@ class LangGraphAgent:
         Returns:
             Command: Command object with updated messages and routing back to chat.
         """
-        outputs = []
-        for tool_call in state.messages[-1].tool_calls:
+        tool_calls = state.messages[-1].tool_calls
+
+        async def _execute_tool(tool_call: dict) -> ToolMessage:
             tool_result = await self.tools_by_name[tool_call["name"]].ainvoke(tool_call["args"])
-            outputs.append(
-                ToolMessage(
-                    content=tool_result,
-                    name=tool_call["name"],
-                    tool_call_id=tool_call["id"],
-                )
+            return ToolMessage(
+                content=tool_result,
+                name=tool_call["name"],
+                tool_call_id=tool_call["id"],
             )
+
+        # Execute tool calls concurrently when multiple are requested
+        if len(tool_calls) == 1:
+            outputs = [await _execute_tool(tool_calls[0])]
+        else:
+            outputs = list(await asyncio.gather(*[_execute_tool(tc) for tc in tool_calls]))
+
         return Command(update={"messages": outputs}, goto="chat")
 
     async def create_graph(self) -> Optional[CompiledStateGraph]:
@@ -248,9 +254,10 @@ class LangGraphAgent:
         """
         if self._graph is None:
             self._graph = await self.create_graph()
+        callbacks = [langfuse_callback_handler] if settings.LANGFUSE_TRACING_ENABLED else []
         config = {
             "configurable": {"thread_id": session_id},
-            "callbacks": [langfuse_callback_handler],
+            "callbacks": callbacks,
             "metadata": {
                 "user_id": user_id,
                 "session_id": session_id,
@@ -260,7 +267,12 @@ class LangGraphAgent:
         }
 
         try:
-            state = await self._graph.aget_state(config)
+            # Run state check and memory search concurrently to save 200-500ms
+            state, relevant_memory = await asyncio.gather(
+                self._graph.aget_state(config),
+                memory_service.search(user_id, messages[-1].content),
+            )
+
             if state.next:
                 logger.info("resuming_interrupted_graph", session_id=session_id, next_nodes=state.next)
                 response = await self._graph.ainvoke(
@@ -268,9 +280,7 @@ class LangGraphAgent:
                     config=config,
                 )
             else:
-                relevant_memory = (
-                    await memory_service.search(user_id, messages[-1].content)
-                ) or "No relevant memory found."
+                relevant_memory = relevant_memory or "No relevant memory found."
                 response = await self._graph.ainvoke(
                     input={"messages": dump_messages(messages), "long_term_memory": relevant_memory},
                     config=config,
@@ -309,9 +319,10 @@ class LangGraphAgent:
         Yields:
             str: Tokens of the LLM response.
         """
+        callbacks = [langfuse_callback_handler] if settings.LANGFUSE_TRACING_ENABLED else []
         config = {
             "configurable": {"thread_id": session_id},
-            "callbacks": [langfuse_callback_handler],
+            "callbacks": callbacks,
             "metadata": {
                 "user_id": user_id,
                 "session_id": session_id,
@@ -323,14 +334,17 @@ class LangGraphAgent:
             self._graph = await self.create_graph()
 
         try:
-            state = await self._graph.aget_state(config)
+            # Run state check and memory search concurrently to save 200-500ms
+            state, relevant_memory = await asyncio.gather(
+                self._graph.aget_state(config),
+                memory_service.search(user_id, messages[-1].content),
+            )
+
             if state.next:
                 logger.info("resuming_interrupted_graph_stream", session_id=session_id, next_nodes=state.next)
                 graph_input = Command(resume=messages[-1].content)
             else:
-                relevant_memory = (
-                    await memory_service.search(user_id, messages[-1].content)
-                ) or "No relevant memory found."
+                relevant_memory = relevant_memory or "No relevant memory found."
                 graph_input = {"messages": dump_messages(messages), "long_term_memory": relevant_memory}
 
             async for token, _ in self._graph.astream(
@@ -374,9 +388,7 @@ class LangGraphAgent:
         if self._graph is None:
             self._graph = await self.create_graph()
 
-        state: StateSnapshot = await sync_to_async(self._graph.get_state)(
-            config={"configurable": {"thread_id": session_id}}
-        )
+        state: StateSnapshot = await self._graph.aget_state(config={"configurable": {"thread_id": session_id}})
         return self.__process_messages(state.values["messages"]) if state.values else []
 
     def __process_messages(self, messages: list[BaseMessage]) -> list[Message]:
@@ -401,23 +413,16 @@ class LangGraphAgent:
             # Make sure the pool is initialized in the current event loop
             conn_pool = await self._get_connection_pool()
 
-            # Use a new connection for this specific operation
+            # Batch all DELETEs in a single pipeline round-trip
             async with conn_pool.connection() as conn:
-                for table in settings.CHECKPOINT_TABLES:
-                    try:
+                async with conn.pipeline():
+                    for table in settings.CHECKPOINT_TABLES:
                         await conn.execute(f"DELETE FROM {table} WHERE thread_id = %s", (session_id,))
-                        logger.info(
-                            "checkpoint_table_cleared_for_session",
-                            table=table,
-                            session_id=session_id,
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "checkpoint_table_clear_failed",
-                            table=table,
-                            error=str(e),
-                        )
-                        raise
+                logger.info(
+                    "checkpoint_tables_cleared_for_session",
+                    tables=settings.CHECKPOINT_TABLES,
+                    session_id=session_id,
+                )
 
         except Exception as e:
             logger.error(

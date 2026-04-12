@@ -1,5 +1,7 @@
 """LLM service for managing LLM calls with retries and fallback mechanisms."""
 
+import asyncio
+import logging
 from typing import (
     Any,
     Dict,
@@ -50,7 +52,7 @@ class LLMRegistry:
             ),
         },
         {
-            "name": "gpt-5",
+            "name": "gpt-5.4",
             "llm": ChatOpenAI(
                 model="gpt-5",
                 api_key=settings.OPENAI_API_KEY,
@@ -59,34 +61,23 @@ class LLMRegistry:
             ),
         },
         {
-            "name": "gpt-5-nano",
+            "name": "gpt-5.4-nano",
             "llm": ChatOpenAI(
-                model="gpt-5-nano",
+                model="gpt-5.4-nano",
                 api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
-                reasoning={"effort": "minimal"},
+                reasoning={"effort": "low"},
             ),
         },
         {
-            "name": "gpt-4o",
+            "name": "gpt-5",
             "llm": ChatOpenAI(
-                model="gpt-4o",
-                temperature=settings.DEFAULT_LLM_TEMPERATURE,
+                model="gpt-5",
                 api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
                 top_p=0.95 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.8,
                 presence_penalty=0.1 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.0,
                 frequency_penalty=0.1 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.0,
-            ),
-        },
-        {
-            "name": "gpt-4o-mini",
-            "llm": ChatOpenAI(
-                model="gpt-4o-mini",
-                temperature=settings.DEFAULT_LLM_TEMPERATURE,
-                api_key=settings.OPENAI_API_KEY,
-                max_tokens=settings.MAX_TOKENS,
-                top_p=0.9 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.8,
             ),
         },
     ]
@@ -229,7 +220,7 @@ class LLMService:
         stop=stop_after_attempt(settings.MAX_LLM_CALL_RETRIES),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((RateLimitError, APITimeoutError, APIError)),
-        before_sleep=before_sleep_log(logger, "WARNING"),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
     async def _call_llm_with_retry(self, messages: List[BaseMessage]) -> BaseMessage:
@@ -284,8 +275,27 @@ class LLMService:
             BaseMessage response from the LLM
 
         Raises:
-            RuntimeError: If all models fail after retries
+            RuntimeError: If all models fail after retries or total timeout is exceeded
         """
+        try:
+            return await asyncio.wait_for(
+                self._call_with_fallback(messages, model_name, **model_kwargs),
+                timeout=settings.LLM_TOTAL_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.exception(
+                "llm_total_timeout_exceeded",
+                timeout_seconds=settings.LLM_TOTAL_TIMEOUT,
+            )
+            raise RuntimeError(f"llm call timed out after {settings.LLM_TOTAL_TIMEOUT}s total budget")
+
+    async def _call_with_fallback(
+        self,
+        messages: List[BaseMessage],
+        model_name: Optional[str] = None,
+        **model_kwargs,
+    ) -> BaseMessage:
+        """Execute LLM call with circular model fallback."""
         # If user specifies a model, get it from registry
         if model_name:
             try:

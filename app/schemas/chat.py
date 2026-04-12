@@ -12,6 +12,8 @@ from pydantic import (
     field_validator,
 )
 
+from app.schemas.base import BaseResponse
+
 
 class Message(BaseModel):
     """Message model for chat endpoint.
@@ -65,7 +67,7 @@ class ChatRequest(BaseModel):
     )
 
 
-class ChatResponse(BaseModel):
+class ChatResponse(BaseResponse):
     """Response model for chat endpoint.
 
     Attributes:
@@ -75,7 +77,7 @@ class ChatResponse(BaseModel):
     messages: List[Message] = Field(..., description="List of messages in the conversation")
 
 
-class StreamResponse(BaseModel):
+class StreamResponse(BaseResponse):
     """Response model for streaming chat endpoint.
 
     Attributes:

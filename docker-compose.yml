@@ -21,6 +21,22 @@ services:
     networks:
       - monitoring
 
+  # Valkey (Redis-compatible) cache — optional, set VALKEY_HOST=valkey in your .env to enable
+  valkey:
+    image: valkey/valkey:8.1.6-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - monitoring
+
   # Single API service with dynamic environment
   app:
     build:
@@ -100,3 +116,4 @@ networks:
 volumes:
   grafana-storage:
   postgres-data:
+  valkey-data:

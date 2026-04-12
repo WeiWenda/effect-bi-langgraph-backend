@@ -1,12 +1,42 @@
 """This file contains the graph utilities for the application."""
 
-from langchain_core.language_models.chat_models import BaseChatModel
+import tiktoken
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import trim_messages as _trim_messages
 
 from app.core.config import settings
 from app.core.logging import logger
 from app.schemas import Message
+
+# Cache tiktoken encoding at module level — thread-safe and reusable
+try:
+    _TIKTOKEN_ENCODING = tiktoken.encoding_for_model(settings.DEFAULT_LLM_MODEL)
+except KeyError:
+    _TIKTOKEN_ENCODING = tiktoken.get_encoding("cl100k_base")
+
+
+def _count_tokens_tiktoken(messages: list) -> int:
+    """Count tokens locally using tiktoken — no API call needed."""
+    num_tokens = 0
+    for message in messages:
+        # Every message has overhead tokens for role/name
+        num_tokens += 4
+        if isinstance(message, dict):
+            for _, value in message.items():
+                if isinstance(value, str):
+                    num_tokens += len(_TIKTOKEN_ENCODING.encode(value))
+        elif isinstance(message, BaseMessage):
+            content = message.content
+            if isinstance(content, str):
+                num_tokens += len(_TIKTOKEN_ENCODING.encode(content))
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, str):
+                        num_tokens += len(_TIKTOKEN_ENCODING.encode(block))
+                    elif isinstance(block, dict) and "text" in block:
+                        num_tokens += len(_TIKTOKEN_ENCODING.encode(block["text"]))
+    num_tokens += 2  # every reply is primed with assistant
+    return num_tokens
 
 
 def dump_messages(messages: list[Message]) -> list[dict]:
@@ -67,12 +97,11 @@ def process_llm_response(response: BaseMessage) -> BaseMessage:
     return response
 
 
-def prepare_messages(messages: list[Message], llm: BaseChatModel, system_prompt: str) -> list[Message]:
+def prepare_messages(messages: list[Message], system_prompt: str) -> list[Message]:
     """Prepare the messages for the LLM.
 
     Args:
         messages (list[Message]): The messages to prepare.
-        llm (BaseChatModel): The LLM to use.
         system_prompt (str): The system prompt to use.
 
     Returns:
@@ -82,7 +111,7 @@ def prepare_messages(messages: list[Message], llm: BaseChatModel, system_prompt:
         trimmed_messages = _trim_messages(
             dump_messages(messages),
             strategy="last",
-            token_counter=llm,
+            token_counter=_count_tokens_tiktoken,
             max_tokens=settings.MAX_TOKENS,
             start_on="human",
             include_system=False,
