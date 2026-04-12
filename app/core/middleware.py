@@ -1,8 +1,11 @@
 """Custom middleware for tracking metrics and other cross-cutting concerns."""
 
+import json
 import time
+import tracemalloc
 from typing import Callable
 
+from asgi_correlation_id import correlation_id
 from fastapi import Request
 from jose import (
     JWTError,
@@ -15,12 +18,21 @@ from app.core.config import settings
 from app.core.logging import (
     bind_context,
     clear_context,
+    logger,
 )
 from app.core.metrics import (
     db_connections,
     http_request_duration_seconds,
     http_requests_total,
 )
+
+try:
+    from pyinstrument import Profiler
+    from pyinstrument.renderers import JSONRenderer
+
+    PYINSTRUMENT_AVAILABLE = True
+except ImportError:
+    PYINSTRUMENT_AVAILABLE = False
 
 
 class MetricsMiddleware(BaseHTTPMiddleware):
@@ -106,3 +118,81 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
         finally:
             # Always clear context after request is complete to avoid leaking to other requests
             clear_context()
+
+
+class ProfilingMiddleware(BaseHTTPMiddleware):
+    """Automatic per-request profiling middleware using pyinstrument.
+
+    Only active when DEBUG=true. Profiles every request and saves an HTML
+    flamegraph to PROFILING_DIR when the request exceeds
+    PROFILING_THRESHOLD_SECONDS. Files are named {request_id}.html so they
+    can be correlated with logs. /tmp is cleaned up automatically by the OS.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """Profile every request; save enriched JSON if duration exceeds threshold."""
+        if not PYINSTRUMENT_AVAILABLE:
+            return await call_next(request)
+
+        # Start all three profilers
+        tracemalloc.start()
+        cpu_start = time.process_time()
+
+        profiler = Profiler(async_mode="enabled")
+        with profiler:
+            response = await call_next(request)
+
+        # Capture metrics immediately after the request
+        cpu_ms = round((time.process_time() - cpu_start) * 1000, 2)
+        mem_current_kb, mem_peak_kb = (v // 1024 for v in tracemalloc.get_traced_memory())
+        snapshot = tracemalloc.take_snapshot()
+        tracemalloc.stop()
+
+        wall_ms = round((profiler.last_session.duration if profiler.last_session else 0.0) * 1000, 2)
+
+        if wall_ms / 1000 >= settings.PROFILING_THRESHOLD_SECONDS:
+            raw_id = correlation_id.get() or "unknown"
+            if len(raw_id) == 32 and "-" not in raw_id:
+                raw_id = f"{raw_id[:8]}-{raw_id[8:12]}-{raw_id[12:16]}-{raw_id[16:20]}-{raw_id[20:]}"
+
+            settings.PROFILING_DIR.mkdir(parents=True, exist_ok=True)
+            filepath = settings.PROFILING_DIR / f"{raw_id}.json"
+
+            # Top 20 memory allocators — exclude profiler and stdlib noise
+            _excluded = ("tracemalloc", "pyinstrument", "<frozen", "logging/__init__")
+            top_allocs = [
+                {
+                    "file": str(stat.traceback[0].filename).replace(str(__file__).rsplit("/", 3)[0] + "/", ""),
+                    "line": stat.traceback[0].lineno,
+                    "size_kb": round(stat.size / 1024, 2),
+                    "count": stat.count,
+                }
+                for stat in snapshot.statistics("lineno")
+                if not any(ex in str(stat.traceback[0].filename) for ex in _excluded)
+            ]
+
+            call_tree = json.loads(profiler.output(renderer=JSONRenderer()))
+            report = {
+                "request_id": raw_id,
+                "endpoint": f"{request.method} {request.url.path}",
+                "wall_time_ms": wall_ms,
+                "cpu_time_ms": cpu_ms,
+                "io_wait_ms": round(wall_ms - cpu_ms, 2),
+                "memory_peak_kb": mem_peak_kb,
+                "memory_allocated_kb": mem_current_kb,
+                "top_memory_allocators": top_allocs,
+                "call_tree": call_tree,
+            }
+            filepath.write_text(json.dumps(report, indent=2))
+            logger.debug(
+                "slow_request_profile_saved",
+                path=request.url.path,
+                method=request.method,
+                wall_time_ms=wall_ms,
+                cpu_time_ms=cpu_ms,
+                memory_peak_kb=mem_peak_kb,
+                io_wait_ms=round(wall_ms - cpu_ms, 2),
+                profile_file=str(filepath),
+            )
+
+        return response
