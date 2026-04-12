@@ -1,5 +1,6 @@
 """LLM service for managing LLM calls with retries and fallback mechanisms."""
 
+import asyncio
 from typing import (
     Any,
     Dict,
@@ -284,8 +285,27 @@ class LLMService:
             BaseMessage response from the LLM
 
         Raises:
-            RuntimeError: If all models fail after retries
+            RuntimeError: If all models fail after retries or total timeout is exceeded
         """
+        try:
+            return await asyncio.wait_for(
+                self._call_with_fallback(messages, model_name, **model_kwargs),
+                timeout=settings.LLM_TOTAL_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.exception(
+                "llm_total_timeout_exceeded",
+                timeout_seconds=settings.LLM_TOTAL_TIMEOUT,
+            )
+            raise RuntimeError(f"llm call timed out after {settings.LLM_TOTAL_TIMEOUT}s total budget")
+
+    async def _call_with_fallback(
+        self,
+        messages: List[BaseMessage],
+        model_name: Optional[str] = None,
+        **model_kwargs,
+    ) -> BaseMessage:
+        """Execute LLM call with circular model fallback."""
         # If user specifies a model, get it from registry
         if model_name:
             try:
