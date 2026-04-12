@@ -1,6 +1,7 @@
 install:
 	pip install uv
 	uv sync
+	uv run pre-commit install
 
 DOCKER_COMPOSE ?= docker-compose
 
@@ -46,6 +47,12 @@ lint:
 
 format:
 	ruff format .
+
+pre-commit:
+	uv run pre-commit run --all-files
+
+pre-commit-update:
+	uv run pre-commit autoupdate
 
 clean:
 	rm -rf .venv

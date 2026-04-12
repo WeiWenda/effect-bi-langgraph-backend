@@ -74,4 +74,3 @@ echo "Granting privileges on database $POSTGRES_DB to $POSTGRES_USER"
 "${DC_CMD[@]}" exec -T db psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE \"${db_escaped}\" TO \"${role_escaped}\""
 
 echo "PostgreSQL role and database ensured successfully"
-
