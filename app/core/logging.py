@@ -19,6 +19,7 @@ from typing import (
 )
 
 import structlog
+from asgi_correlation_id import correlation_id
 
 from app.core.config import (
     Environment,
@@ -29,7 +30,7 @@ from app.core.config import (
 settings.LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # Context variables for storing request-specific data
-_request_context: ContextVar[Dict[str, Any]] = ContextVar("request_context", default={})
+_request_context: ContextVar[Dict[str, Any]] = ContextVar("request_context", default=None)
 
 
 def bind_context(**kwargs: Any) -> None:
@@ -38,13 +39,13 @@ def bind_context(**kwargs: Any) -> None:
     Args:
         **kwargs: Key-value pairs to bind to the logging context
     """
-    current = _request_context.get()
+    current = _request_context.get() or {}
     _request_context.set({**current, **kwargs})
 
 
 def clear_context() -> None:
     """Clear all context variables for the current request."""
-    _request_context.set({})
+    _request_context.set(None)
 
 
 def get_context() -> Dict[str, Any]:
@@ -53,7 +54,7 @@ def get_context() -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: Current context dictionary
     """
-    return _request_context.get()
+    return _request_context.get() or {}
 
 
 def add_context_to_event_dict(logger: Any, method_name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -72,6 +73,23 @@ def add_context_to_event_dict(logger: Any, method_name: str, event_dict: Dict[st
     context = get_context()
     if context:
         event_dict.update(context)
+    return event_dict
+
+
+def add_request_id_to_event_dict(logger: Any, method_name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Add the current request_id (from asgi-correlation-id) to every log event.
+
+    Args:
+        logger: The logger instance
+        method_name: The name of the logging method
+        event_dict: The event dictionary to modify
+
+    Returns:
+        Dict[str, Any]: Modified event dictionary with request_id
+    """
+    request_id = correlation_id.get()
+    if request_id:
+        event_dict["request_id"] = request_id
     return event_dict
 
 
@@ -144,6 +162,8 @@ def get_structlog_processors(include_file_info: bool = True) -> List[Any]:
         structlog.processors.UnicodeDecoder(),
         # Add context variables (user_id, session_id, etc.) to all log events
         add_context_to_event_dict,
+        # Add request_id from asgi-correlation-id to all log events
+        add_request_id_to_event_dict,
     ]
 
     # Add callsite parameters if file info is requested
@@ -174,7 +194,7 @@ def setup_logging() -> None:
     """
     # Determine log level based on DEBUG setting
     log_level = logging.DEBUG if settings.DEBUG else logging.INFO
-    
+
     # Create file handler for JSON logs
     file_handler = JsonlFileHandler(get_log_file_path())
     file_handler.setLevel(log_level)
@@ -186,8 +206,7 @@ def setup_logging() -> None:
     # Get shared processors
     shared_processors = get_structlog_processors(
         # Include detailed file info only in development and test
-        include_file_info=settings.ENVIRONMENT
-        in [Environment.DEVELOPMENT, Environment.TEST]
+        include_file_info=settings.ENVIRONMENT in [Environment.DEVELOPMENT, Environment.TEST]
     )
 
     # Configure standard logging
