@@ -1,6 +1,7 @@
 """LLM service for managing LLM calls with retries and fallback mechanisms."""
 
 import asyncio
+import logging
 from typing import (
     Any,
     Dict,
@@ -51,7 +52,7 @@ class LLMRegistry:
             ),
         },
         {
-            "name": "gpt-5",
+            "name": "gpt-5.4",
             "llm": ChatOpenAI(
                 model="gpt-5",
                 api_key=settings.OPENAI_API_KEY,
@@ -60,34 +61,23 @@ class LLMRegistry:
             ),
         },
         {
-            "name": "gpt-5-nano",
+            "name": "gpt-5.4-nano",
             "llm": ChatOpenAI(
-                model="gpt-5-nano",
+                model="gpt-5.4-nano",
                 api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
-                reasoning={"effort": "minimal"},
+                reasoning={"effort": "low"},
             ),
         },
         {
-            "name": "gpt-4o",
+            "name": "gpt-5",
             "llm": ChatOpenAI(
-                model="gpt-4o",
-                temperature=settings.DEFAULT_LLM_TEMPERATURE,
+                model="gpt-5",
                 api_key=settings.OPENAI_API_KEY,
                 max_tokens=settings.MAX_TOKENS,
                 top_p=0.95 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.8,
                 presence_penalty=0.1 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.0,
                 frequency_penalty=0.1 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.0,
-            ),
-        },
-        {
-            "name": "gpt-4o-mini",
-            "llm": ChatOpenAI(
-                model="gpt-4o-mini",
-                temperature=settings.DEFAULT_LLM_TEMPERATURE,
-                api_key=settings.OPENAI_API_KEY,
-                max_tokens=settings.MAX_TOKENS,
-                top_p=0.9 if settings.ENVIRONMENT == Environment.PRODUCTION else 0.8,
             ),
         },
     ]
@@ -230,7 +220,7 @@ class LLMService:
         stop=stop_after_attempt(settings.MAX_LLM_CALL_RETRIES),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((RateLimitError, APITimeoutError, APIError)),
-        before_sleep=before_sleep_log(logger, "WARNING"),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
     async def _call_llm_with_retry(self, messages: List[BaseMessage]) -> BaseMessage:
