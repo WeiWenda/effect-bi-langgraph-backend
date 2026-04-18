@@ -39,7 +39,7 @@ from app.services.memory import memory_service
 
 # Load environment variables
 load_dotenv()
-langfuse_init()
+# langfuse_init()
 
 
 @asynccontextmanager
