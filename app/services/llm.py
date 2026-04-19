@@ -43,10 +43,11 @@ class LLMRegistry:
     # Class-level variable containing all available LLM models
     LLMS: List[Dict[str, Any]] = [
         {
-            "name": "gpt-5-mini",
+            "name": "qwen3.5-122b-a10b",
             "llm": ChatOpenAI(
-                model="gpt-5-mini",
+                model="qwen3.5-122b-a10b",
                 api_key=settings.OPENAI_API_KEY,
+                base_url=settings.OPENAI_BASE_URL,
                 max_tokens=settings.MAX_TOKENS,
                 reasoning={"effort": "low"},
             ),

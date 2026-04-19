@@ -60,6 +60,8 @@ class MemoryService:
 
         Returns formatted memory string, or empty string on failure.
         """
+        if not settings.USE_LONG_TERM_MEMORY:
+            return ""
         try:
             # Check cache first
             key = cache_key("memory", str(user_id), query)

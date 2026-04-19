@@ -11,6 +11,7 @@ from langchain_core.messages import (
     BaseMessage,
     ToolMessage,
     convert_to_openai_messages,
+    AIMessage,
 )
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.errors import GraphInterrupt
@@ -297,9 +298,10 @@ class LangGraphAgent:
                 logger.info("graph_interrupted", session_id=session_id, interrupt_value=str(interrupt_value))
                 return [Message(role="assistant", content=str(interrupt_value))]
 
-            asyncio.create_task(
-                memory_service.add(user_id, convert_to_openai_messages(response["messages"]), config["metadata"])
-            )
+            if settings.USE_LONG_TERM_MEMORY:
+                asyncio.create_task(
+                    memory_service.add(user_id, convert_to_openai_messages(response["messages"]), config["metadata"])
+                )
             return self.__process_messages(response["messages"])
         except GraphInterrupt:
             state = await self._graph.aget_state(config)
@@ -357,13 +359,17 @@ class LangGraphAgent:
                 relevant_memory = relevant_memory or "No relevant memory found."
                 graph_input = {"messages": dump_messages(messages), "long_term_memory": relevant_memory}
 
-            async for token, _ in self._graph.astream(
-                graph_input,
-                config,
-                stream_mode="messages",
-            ):
-                if isinstance(token.content, str) and token.content:
-                    yield token.content
+            async for output in self._graph.astream(graph_input, config):
+                # output is dict like {'chat': {'messages': [AIMessage(...)]}}
+                for node_name, node_state in output.items():
+                    if isinstance(node_state, dict) and "messages" in node_state:
+                        messages = node_state["messages"]
+                        if messages and len(messages) > 0:
+                            last_message = messages[-1]
+                            if isinstance(last_message, AIMessage):
+                                content = last_message.content
+                                if isinstance(content, str) and content:
+                                    yield content
 
             # After streaming completes, check for interrupt or update memory
             state = await self._graph.aget_state(config)
@@ -372,11 +378,12 @@ class LangGraphAgent:
                 logger.info("graph_interrupted_stream", session_id=session_id, interrupt_value=str(interrupt_value))
                 yield str(interrupt_value)
             elif state.values and "messages" in state.values:
-                asyncio.create_task(
-                    memory_service.add(
-                        user_id, convert_to_openai_messages(state.values["messages"]), config["metadata"]
+                if settings.USE_LONG_TERM_MEMORY:
+                    asyncio.create_task(
+                        memory_service.add(
+                            user_id, convert_to_openai_messages(state.values["messages"]), config["metadata"]
+                        )
                     )
-                )
         except GraphInterrupt:
             state = await self._graph.aget_state(config)
             interrupt_value = state.tasks[0].interrupts[0].value if state.tasks else "Waiting for input."
