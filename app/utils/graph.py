@@ -108,15 +108,35 @@ def prepare_messages(messages: list[Message], system_prompt: str) -> list[Messag
         list[Message]: The prepared messages.
     """
     try:
-        trimmed_messages = _trim_messages(
-            dump_messages(messages),
-            strategy="last",
-            token_counter=_count_tokens_tiktoken,
-            max_tokens=settings.MAX_TOKENS,
-            start_on="human",
-            include_system=False,
-            allow_partial=False,
+        # Check if there are tool calls in the messages to preserve context
+        has_tool_calls = any(
+            hasattr(msg, 'tool_calls') and msg.tool_calls 
+            for msg in messages
         )
+        
+        if has_tool_calls:
+            # Preserve full context when there are tool calls
+            # Use a different trimming strategy that preserves more context
+            trimmed_messages = _trim_messages(
+                dump_messages(messages),
+                strategy="last",
+                token_counter=_count_tokens_tiktoken,
+                max_tokens=settings.MAX_TOKENS * 2,  # Double the limit for tool call scenarios
+                start_on="human",
+                include_system=False,
+                allow_partial=False,
+            )
+        else:
+            # Use normal trimming for regular conversations
+            trimmed_messages = _trim_messages(
+                dump_messages(messages),
+                strategy="last",
+                token_counter=_count_tokens_tiktoken,
+                max_tokens=settings.MAX_TOKENS,
+                start_on="human",
+                include_system=False,
+                allow_partial=False,
+            )
     except ValueError as e:
         # Handle unrecognized content blocks (e.g., reasoning blocks from GPT-5)
         if "Unrecognized content block type" in str(e):
@@ -126,8 +146,16 @@ def prepare_messages(messages: list[Message], system_prompt: str) -> list[Messag
                 message_count=len(messages),
             )
             # Skip trimming and return all messages
-            trimmed_messages = messages
+            trimmed_messages = dump_messages(messages)
         else:
             raise
 
-    return [Message(role="system", content=system_prompt)] + trimmed_messages
+    # Convert trimmed dict messages back to Message objects for consistency
+    message_objects = []
+    for msg_dict in trimmed_messages:
+        if isinstance(msg_dict, dict):
+            message_objects.append(Message(**msg_dict))
+        else:
+            message_objects.append(msg_dict)
+
+    return [Message(role="system", content=system_prompt)] + message_objects

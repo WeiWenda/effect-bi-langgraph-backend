@@ -4,8 +4,12 @@ import asyncio
 from typing import (
     AsyncGenerator,
     Optional,
+    List,
 )
 from urllib.parse import quote_plus
+
+from fastmcp import Client
+from fastmcp.client import StreamableHttpTransport
 
 from langchain_core.messages import (
     BaseMessage,
@@ -13,6 +17,10 @@ from langchain_core.messages import (
     convert_to_openai_messages,
     AIMessage,
 )
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel
+
+
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.errors import GraphInterrupt
 from langgraph.graph import (
@@ -52,7 +60,7 @@ from app.utils import (
 
 
 class LangGraphAgent:
-    """Manages the LangGraph Agent/workflow and interactions with the LLM.
+    """LangGraph Agent class for managing AI workflows and LLM interactions.
 
     This class handles the creation and management of the LangGraph workflow,
     including LLM interactions, database connections, and response processing.
@@ -62,12 +70,150 @@ class LangGraphAgent:
         """Initialize the LangGraph Agent with necessary components."""
         # Use the LLM service with tools bound
         self.llm_service = llm_service
-        self.llm_service.bind_tools(tools)
-        self.tools_by_name = {tool.name: tool for tool in tools}
+        self._local_tools = tools
+        self._mcp_client: Optional[Client] = None
+        self._mcp_tools: List = []
+        self.tools_by_name = {}
         self._connection_pool: Optional[AsyncConnectionPool] = None
         self._graph: Optional[CompiledStateGraph] = None
+        # Initialize MCP client and bind all tools
+        asyncio.create_task(self._init_mcp_and_bind_tools())
+
+    async def close(self):
+        """Close the MCP client connection if it exists."""
+        # Close MCP client
+        if self._mcp_client:
+            try:
+                await self._mcp_client.close()
+                logger.info("mcp_client_closed", environment=settings.ENVIRONMENT.value)
+            except Exception as e:
+                logger.error("mcp_client_close_failed", error=str(e), environment=settings.ENVIRONMENT.value)
+
+        # Close connection pool if it exists
+        if self._connection_pool:
+            try:
+                await self._connection_pool.close()
+                logger.info("connection_pool_closed", environment=settings.ENVIRONMENT.value)
+            except Exception as e:
+                logger.error("connection_pool_close_failed", error=str(e), environment=settings.ENVIRONMENT.value)
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - ensure cleanup."""
+        await self.close()
+
+    def _convert_mcp_tools_to_langchain(self, mcp_tools):
+        """Convert MCP tools to LangChain compatible format using StructuredTool.
+        
+        Args:
+            mcp_tools: List of MCP Tool objects
+            
+        Returns:
+            List of LangChain compatible tool objects
+        """
+        langchain_tools = []
+        
+        for tool in mcp_tools:
+            # Create a closure to capture the MCP client and tool name
+            def create_mcp_tool_func(mcp_client, tool_name):
+                async def mcp_tool_func(**kwargs):
+                    """Async function to call MCP tool using passed client."""
+                    try:
+                        async with mcp_client:
+                            result = await mcp_client.call_tool(tool_name, kwargs)
+                            # Extract the actual result content
+                            if hasattr(result, 'content') and result.content:
+                                if isinstance(result.content, list):
+                                    # Handle TextContent objects
+                                    first_item = result.content[0]
+                                    if hasattr(first_item, 'text'):
+                                        return first_item.text
+                                    elif isinstance(first_item, dict):
+                                        return first_item.get('text', '')
+                                    else:
+                                        return str(first_item)
+                                return str(result.content)
+                            elif hasattr(result, 'result'):
+                                return str(result.result)
+                            else:
+                                return str(result)
+                    except Exception as e:
+                        logger.error(
+                            "mcp_tool_call_failed",
+                            tool_name=tool_name,
+                            error=str(e),
+                            kwargs=kwargs
+                        )
+                        return f"Error calling tool {tool_name}: {str(e)}"
+                return mcp_tool_func
+            
+            # Create the async function with MCP client as parameter
+            mcp_tool_func = create_mcp_tool_func(self._mcp_client, tool.name)
+            
+            # Create StructuredTool with coroutine support
+            structured_tool = StructuredTool.from_function(
+                func=mcp_tool_func,
+                coroutine=mcp_tool_func,  # Explicitly mark as coroutine
+                name=tool.name,
+                description=tool.description or "",
+                args_schema=tool.inputSchema or {}
+            )
+            
+            langchain_tools.append(structured_tool)
+        
+        return langchain_tools
+
+    async def _init_mcp_and_bind_tools(self):
+        """Initialize MCP client and bind all tools (local + MCP) to llm_service."""
+        mcp_server_url = "http://localhost:12008/metamcp/endpoint-test/mcp"
+        # Initialize MCP client using fastmcp
+        try:
+            self._mcp_client = Client(mcp_server_url)
+            
+            async with self._mcp_client:
+                # Get tools from MCP server
+                tools = await self._mcp_client.list_tools()
+                # Convert MCP tools to LangChain compatible format
+                self._mcp_tools = self._convert_mcp_tools_to_langchain(tools) if tools else []
+                logger.info(
+                    "mcp_tools_loaded",
+                    tool_count=len(self._mcp_tools),
+                    environment=settings.ENVIRONMENT.value,
+                )
+        except Exception as e:
+            logger.error(
+                "mcp_client_connection_failed",
+                mcp_server_url=mcp_server_url,
+                error=str(e),
+                environment=settings.ENVIRONMENT.value,
+            )
+            self._mcp_client = None
+            self._mcp_tools = []
+
+        # Combine local tools and MCP tools
+        all_tools = self._local_tools.copy()
+        
+        # Add MCP tools (they are already proper LangChain tool objects)
+        all_tools.extend(self._mcp_tools)
+        
+        # Update tools_by_name mapping
+        self.tools_by_name = {}
+        for tool in all_tools:
+            if hasattr(tool, 'name'):
+                self.tools_by_name[tool.name] = tool
+            elif hasattr(tool, '__name__'):
+                self.tools_by_name[tool.__name__] = tool
+
+        # Bind all tools to llm_service
+        self.llm_service.bind_tools(all_tools)
         logger.info(
-            "langgraph_agent_initialized",
+            "all_tools_bound_to_llm_service",
+            total_tool_count=len(all_tools),
+            local_tool_count=len(self._local_tools),
+            mcp_tool_count=len(self._mcp_tools),
             model=settings.DEFAULT_LLM_MODEL,
             environment=settings.ENVIRONMENT.value,
         )

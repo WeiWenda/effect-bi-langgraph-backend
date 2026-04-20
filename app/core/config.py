@@ -221,6 +221,9 @@ class Settings:
             if value:
                 self.RATE_LIMIT_ENDPOINTS[endpoint] = value
 
+        # MCP Configuration
+        self.MCP_BEARER_TOKEN = os.getenv("MCP_BEARER_TOKEN", "")
+
         # Evaluation Configuration
         self.EVALUATION_LLM = os.getenv("EVALUATION_LLM", "gpt-5")
         self.EVALUATION_BASE_URL = os.getenv("EVALUATION_BASE_URL", "https://api.openai.com/v1")

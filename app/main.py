@@ -22,7 +22,7 @@ from slowapi.errors import RateLimitExceeded
 from asgi_correlation_id import CorrelationIdMiddleware
 
 from app.api.v1.api import api_router
-from app.api.v1.chatbot import agent
+from app.api.v1.chatbot import get_agent, _agent
 from app.core.cache import cache_service
 from app.core.config import settings
 from app.core.limiter import limiter
@@ -61,6 +61,7 @@ async def lifespan(app: FastAPI):
     # Pre-warm the LangGraph agent: create graph + connection pool at startup
     # to avoid cold-start latency on the first request
     try:
+        agent = await get_agent()
         await agent.create_graph()
         logger.info("graph_pre_warmed")
     except Exception as e:
@@ -77,9 +78,8 @@ async def lifespan(app: FastAPI):
 
     # Cleanup on shutdown
     await cache_service.close()
-    if agent._connection_pool:
-        await agent._connection_pool.close()
-        logger.info("connection_pool_closed")
+    if _agent:
+        await _agent.close()
     logger.info("application_shutdown")
 
 

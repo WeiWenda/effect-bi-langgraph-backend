@@ -29,7 +29,17 @@ from app.schemas.chat import (
 )
 
 router = APIRouter()
-agent = LangGraphAgent()
+
+# Global agent instance
+_agent: LangGraphAgent = None
+
+
+async def get_agent() -> LangGraphAgent:
+    """Get or create the LangGraph agent instance."""
+    global _agent
+    if _agent is None:
+        _agent = LangGraphAgent()
+    return _agent
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -38,6 +48,7 @@ async def chat(
     request: Request,
     chat_request: ChatRequest,
     session: Session = Depends(get_current_session),
+    agent: LangGraphAgent = Depends(get_agent),
 ):
     """Process a chat request using LangGraph.
 
@@ -77,6 +88,7 @@ async def chat_stream(
     request: Request,
     chat_request: ChatRequest,
     session: Session = Depends(get_current_session),
+    agent: LangGraphAgent = Depends(get_agent),
 ):
     """Process a chat request using LangGraph with streaming response.
 
@@ -144,6 +156,7 @@ async def chat_stream(
 async def get_session_messages(
     request: Request,
     session: Session = Depends(get_current_session),
+    agent: LangGraphAgent = Depends(get_agent),
 ):
     """Get all messages for a session.
 
@@ -170,6 +183,7 @@ async def get_session_messages(
 async def clear_chat_history(
     request: Request,
     session: Session = Depends(get_current_session),
+    agent: LangGraphAgent = Depends(get_agent),
 ):
     """Clear all messages for a session.
 
