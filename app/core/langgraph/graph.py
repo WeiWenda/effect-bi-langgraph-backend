@@ -275,7 +275,10 @@ class LangGraphAgent:
         )
 
         username = config.get("metadata", {}).get("username")
-        SYSTEM_PROMPT = load_system_prompt(username=username, long_term_memory=state.long_term_memory)
+        if state.custom_system_prompt:
+            SYSTEM_PROMPT = state.custom_system_prompt
+        else:
+            SYSTEM_PROMPT = load_system_prompt(username=username, long_term_memory=state.long_term_memory)
 
         # Prepare messages with system prompt
         messages = prepare_messages(state.messages, SYSTEM_PROMPT)
@@ -390,6 +393,7 @@ class LangGraphAgent:
         session_id: str,
         user_id: Optional[str] = None,
         username: Optional[str] = None,
+        system_prompt: Optional[str] = None,
     ) -> list[dict]:
         """Get a response from the LLM.
 
@@ -398,6 +402,7 @@ class LangGraphAgent:
             session_id (str): The session ID for the conversation.
             user_id (Optional[str]): The user ID for the conversation.
             username (Optional[str]): The display name of the user.
+            system_prompt (Optional[str]): Custom system prompt to override the default.
 
         Returns:
             list[dict]: The response from the LLM.
@@ -433,7 +438,11 @@ class LangGraphAgent:
             else:
                 relevant_memory = relevant_memory or "No relevant memory found."
                 response = await self._graph.ainvoke(
-                    input={"messages": dump_messages(messages), "long_term_memory": relevant_memory},
+                    input={
+                        "messages": dump_messages(messages),
+                        "long_term_memory": relevant_memory,
+                        "custom_system_prompt": system_prompt,
+                    },
                     config=config,
                 )
 
@@ -464,6 +473,7 @@ class LangGraphAgent:
         session_id: str,
         user_id: Optional[str] = None,
         username: Optional[str] = None,
+        system_prompt: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """Get a stream response from the LLM.
 
@@ -472,6 +482,7 @@ class LangGraphAgent:
             session_id (str): The session ID for the conversation.
             user_id (Optional[str]): The user ID for the conversation.
             username (Optional[str]): The display name of the user.
+            system_prompt (Optional[str]): Custom system prompt to override the default.
 
         Yields:
             str: Tokens of the LLM response.
@@ -503,7 +514,11 @@ class LangGraphAgent:
                 graph_input = Command(resume=messages[-1].content)
             else:
                 relevant_memory = relevant_memory or "No relevant memory found."
-                graph_input = {"messages": dump_messages(messages), "long_term_memory": relevant_memory}
+                graph_input = {
+                    "messages": dump_messages(messages),
+                    "long_term_memory": relevant_memory,
+                    "custom_system_prompt": system_prompt,
+                }
 
             async for output in self._graph.astream(graph_input, config):
                 # output is dict like {'chat': {'messages': [AIMessage(...)]}}

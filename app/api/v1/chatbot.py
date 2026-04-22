@@ -71,7 +71,11 @@ async def chat(
         )
 
         result = await agent.get_response(
-            chat_request.messages, session.id, user_id=session.user_id, username=session.username
+            chat_request.messages,
+            session.id,
+            user_id=session.user_id,
+            username=session.username,
+            system_prompt=chat_request.system_prompt,
         )
 
         logger.info("chat_request_processed", session_id=session.id)
@@ -122,7 +126,11 @@ async def chat_stream(
             try:
                 with llm_stream_duration_seconds.labels(model=agent.llm_service.get_llm().get_name()).time():
                     async for chunk in agent.get_stream_response(
-                        chat_request.messages, session.id, user_id=session.user_id, username=session.username
+                        chat_request.messages,
+                        session.id,
+                        user_id=session.user_id,
+                        username=session.username,
+                        system_prompt=chat_request.system_prompt,
                     ):
                         response = StreamResponse(content=chunk, done=False)
                         yield f"data: {response.model_dump_json()}\n\n"

@@ -4,6 +4,7 @@ import re
 from typing import (
     List,
     Literal,
+    Optional,
 )
 
 from pydantic import (
@@ -58,12 +59,17 @@ class ChatRequest(BaseModel):
 
     Attributes:
         messages: List of messages in the conversation.
+        system_prompt: Optional custom system prompt to override the default.
     """
 
     messages: List[Message] = Field(
         ...,
         description="List of messages in the conversation",
         min_length=1,
+    )
+    system_prompt: Optional[str] = Field(
+        default=None,
+        description="Custom system prompt. If provided, overrides the default system prompt.",
     )
 
 
