@@ -158,4 +158,19 @@ def prepare_messages(messages: list[Message], system_prompt: str) -> list[Messag
         else:
             message_objects.append(msg_dict)
 
-    return [Message(role="system", content=system_prompt)] + message_objects
+    # Append CLAWHUB skills instructions to system prompt
+    try:
+        from pathlib import Path
+        skillhub_md_path = Path(__file__).parent.parent / "core" / "prompts" / "skillhub.md"
+        if skillhub_md_path.exists():
+            with open(skillhub_md_path, "r", encoding="utf-8") as f:
+                clawhub_instructions = f.read().strip()
+        else:
+            clawhub_instructions = ""
+    except Exception as e:
+        logger.warning("failed_to_read_skillhub_md", error=str(e))
+        clawhub_instructions = ""
+
+    enhanced_system_prompt = system_prompt + clawhub_instructions
+
+    return [Message(role="system", content=enhanced_system_prompt)] + message_objects

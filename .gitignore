@@ -21,3 +21,6 @@ wheels/
 
 # Reports
 evals/reports/
+
+# Skills directory (installed CLAWHUB skills)
+skills/

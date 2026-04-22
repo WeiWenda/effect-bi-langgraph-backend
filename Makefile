@@ -36,7 +36,7 @@ install:
 # Server
 # ---------------------------------------------------------------------------
 dev:
-	@$(call run_with_env,uv run uvicorn app.main:app --reload --port 8000)
+	@$(call run_with_env,uv run uvicorn app.main:app --reload --reload-dir app --port 8000)
 
 staging:
 	@$(call run_with_env,$(MAKE) _serve ENV=staging)

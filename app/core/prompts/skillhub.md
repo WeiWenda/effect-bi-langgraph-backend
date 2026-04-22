@@ -1,0 +1,4 @@
+# Skills使用说明
+- 在解决问题之前，你可以尝试加载使用本地已经安装好的Skills，也可以通过search_clawhub_skills搜索与问题相关的工具，如果搜索到有用的Skill可以调用install_clawhub_skill工具来将它安装到本地
+- 你可以通过list_installed_clawhub_skills查看本地已安装的Skill
+- 所有Skill都需要通过load_clawhub_skill进行完整内容加载
