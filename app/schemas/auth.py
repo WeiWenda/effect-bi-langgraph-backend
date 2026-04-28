@@ -132,4 +132,5 @@ class SessionResponse(BaseResponse):
         """
         # Remove any potentially harmful characters
         sanitized = re.sub(r'[<>{}[\]()\'"`]', "", v)
-        return sanitized
+        # Truncate to max_length (100 characters)
+        return sanitized[:100]
