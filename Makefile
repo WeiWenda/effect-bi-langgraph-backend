@@ -2,6 +2,7 @@
 
 DOCKER_COMPOSE ?= docker-compose
 ENV            ?= development
+PORT           ?= 8001
 VALID_ENVS     := development staging production test
 
 # ---------------------------------------------------------------------------
@@ -36,7 +37,7 @@ install:
 # Server
 # ---------------------------------------------------------------------------
 dev:
-	@$(call run_with_env,uv run uvicorn app.main:app --reload --reload-dir app --port 8000)
+	@$(call run_with_env,uv run uvicorn app.main:app --reload --reload-dir app --port $(PORT))
 
 staging:
 	@$(call run_with_env,$(MAKE) _serve ENV=staging)
@@ -45,7 +46,7 @@ prod:
 	@$(call run_with_env,$(MAKE) _serve ENV=production)
 
 _serve:
-	@$(call run_with_env,./.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop uvloop)
+	@$(call run_with_env,./.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port $(PORT) --loop uvloop)
 
 # ---------------------------------------------------------------------------
 # Database migrations
@@ -142,7 +143,7 @@ help:
 	@echo "  install              Install deps, set up pre-commit hooks"
 	@echo ""
 	@echo "Server:"
-	@echo "  dev                  Dev server with hot reload (port 8000)"
+	@echo "  dev                  Dev server with hot reload (default port 8001, override: PORT=...)"
 	@echo "  staging              Staging server"
 	@echo "  prod                 Production server"
 	@echo ""

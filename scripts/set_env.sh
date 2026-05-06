@@ -86,7 +86,7 @@ echo -e "${GREEN}Debug mode:      ${YELLOW}${DEBUG:-Not set}${NC}"
 # Create helper functions
 start_app() {
     echo -e "${GREEN}Starting application in $ENV environment...${NC}"
-    cd "$PROJECT_ROOT" && uvicorn app.main:app --reload --port 8000
+    cd "$PROJECT_ROOT" && uvicorn app.main:app --reload --port "${PORT:-8001}"
 }
 
 # Define the function for use in the shell (handle both bash and zsh)
@@ -96,7 +96,7 @@ elif [[ -n "$ZSH_VERSION" ]]; then
     # For ZSH, we redefine the function (no export -f)
     function start_app() {
         echo -e "${GREEN}Starting application in $ENV environment...${NC}"
-        cd "$PROJECT_ROOT" && uvicorn app.main:app --reload --port 8000
+        cd "$PROJECT_ROOT" && uvicorn app.main:app --reload --port "${PORT:-8001}"
     }
 else
     echo -e "${YELLOW}Warning: Unsupported shell. Using fallback method.${NC}"
