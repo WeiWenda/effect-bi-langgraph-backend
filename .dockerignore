@@ -45,10 +45,10 @@ Dockerfile
 .dockerignore
 docker-compose.yml
 
-# Documentation
+# Documentation (keep README.md: pyproject declares readme = "README.md" for uv install)
 docs/
-README.md
 *.md
+!README.md
 
 # Build artifacts
 *.pyc

@@ -79,8 +79,10 @@ echo "Database User: $( [[ -n ${POSTGRES_USER:-${DB_USER:-}} ]] && echo 'set' ||
 echo "LLM Model: ${DEFAULT_LLM_MODEL:-Not set}"
 echo "Debug Mode: ${DEBUG:-false}"
 
-# Run database migrations if necessary
-# e.g., alembic upgrade head
+# Apply SQLModel / app schema (thread, user, session, …) before serving traffic.
+cd /app
+echo "Running Alembic migrations (upgrade head)..."
+alembic upgrade head
 
 # Execute the CMD
 exec "$@"
