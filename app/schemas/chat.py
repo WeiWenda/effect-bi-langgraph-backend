@@ -11,6 +11,7 @@ from pydantic import (
     BaseModel,
     Field,
     field_validator,
+    model_validator,
 )
 
 from app.schemas.base import BaseResponse
@@ -60,6 +61,7 @@ class ChatRequest(BaseModel):
     Attributes:
         messages: List of messages in the conversation.
         system_prompt: Optional custom system prompt to override the default.
+        pre_defined_workflow: Optional predefined workflow name for routing to a specific agent.
     """
 
     messages: List[Message] = Field(
@@ -71,6 +73,17 @@ class ChatRequest(BaseModel):
         default=None,
         description="Custom system prompt. If provided, overrides the default system prompt.",
     )
+    pre_defined_workflow: Optional[str] = Field(
+        default=None,
+        description="Predefined workflow name. Routes to the matching LangGraph agent when set.",
+    )
+
+    @model_validator(mode="after")
+    def clear_workflow_when_system_prompt_set(self) -> "ChatRequest":
+        """Custom system prompt requests must use the default agent."""
+        if self.system_prompt and self.pre_defined_workflow:
+            self.pre_defined_workflow = None
+        return self
 
 
 class ChatResponse(BaseResponse):
@@ -81,6 +94,12 @@ class ChatResponse(BaseResponse):
     """
 
     messages: List[Message] = Field(..., description="List of messages in the conversation")
+
+
+class StreamChunk(BaseModel):
+    """A single chunk from agent streaming."""
+
+    content: str = Field(default="", description="The content of the current chunk")
 
 
 class StreamResponse(BaseResponse):

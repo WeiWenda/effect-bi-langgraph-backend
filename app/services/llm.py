@@ -43,9 +43,9 @@ class LLMRegistry:
     # Class-level variable containing all available LLM models
     LLMS: List[Dict[str, Any]] = [
         {
-            "name": "qwen3.5-122b-a10b",
+            "name": "qwen3.6-flash",
             "llm": ChatOpenAI(
-                model="qwen3.5-122b-a10b",
+                model="qwen3.6-flash",
                 api_key=settings.OPENAI_API_KEY,
                 base_url=settings.OPENAI_BASE_URL,
                 max_tokens=settings.MAX_TOKENS,

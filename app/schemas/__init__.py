@@ -6,6 +6,7 @@ from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
     Message,
+    StreamChunk,
     StreamResponse,
 )
 from app.schemas.graph import GraphState
@@ -17,5 +18,6 @@ __all__ = [
     "ChatResponse",
     "Message",
     "StreamResponse",
+    "StreamChunk",
     "GraphState",
 ]

@@ -16,7 +16,11 @@ from fastapi.responses import StreamingResponse
 
 from app.api.v1.auth import get_current_session
 from app.core.config import settings
-from app.core.langgraph.graph import LangGraphAgent
+from app.core.langgraph.agent_factory import (
+    get_agent,
+    get_default_agent,
+)
+from app.core.langgraph.agent_interface import LangGraphAgentInterface
 from app.core.limiter import limiter
 from app.core.logging import logger
 from app.core.metrics import llm_stream_duration_seconds
@@ -30,17 +34,6 @@ from app.schemas.chat import (
 
 router = APIRouter()
 
-# Global agent instance
-_agent: LangGraphAgent = None
-
-
-async def get_agent() -> LangGraphAgent:
-    """Get or create the LangGraph agent instance."""
-    global _agent
-    if _agent is None:
-        _agent = LangGraphAgent()
-    return _agent
-
 
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit(settings.RATE_LIMIT_ENDPOINTS["chat"][0])
@@ -48,7 +41,7 @@ async def chat(
     request: Request,
     chat_request: ChatRequest,
     session: Session = Depends(get_current_session),
-    agent: LangGraphAgent = Depends(get_agent),
+    agent: LangGraphAgentInterface = Depends(get_default_agent),
 ):
     """Process a chat request using LangGraph.
 
@@ -92,7 +85,6 @@ async def chat_stream(
     request: Request,
     chat_request: ChatRequest,
     session: Session = Depends(get_current_session),
-    agent: LangGraphAgent = Depends(get_agent),
 ):
     """Process a chat request using LangGraph with streaming response.
 
@@ -108,10 +100,22 @@ async def chat_stream(
         HTTPException: If there's an error processing the request.
     """
     try:
+        workflow = chat_request.pre_defined_workflow
+        if chat_request.system_prompt:
+            workflow = None
+
+        try:
+            agent = await get_agent(workflow)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
         logger.info(
             "stream_chat_request_received",
             session_id=session.id,
             message_count=len(chat_request.messages),
+            pre_defined_workflow=workflow,
+            has_system_prompt=bool(chat_request.system_prompt),
+            agent_name=agent.agent_name,
         )
 
         async def event_generator():
@@ -124,7 +128,8 @@ async def chat_stream(
                 Exception: If there's an error during streaming.
             """
             try:
-                with llm_stream_duration_seconds.labels(model=agent.llm_service.get_llm().get_name()).time():
+                llm_model_name = getattr(agent, "llm_service").get_llm().get_name()
+                with llm_stream_duration_seconds.labels(model=llm_model_name).time():
                     async for chunk in agent.get_stream_response(
                         chat_request.messages,
                         session.id,
@@ -132,7 +137,7 @@ async def chat_stream(
                         username=session.username,
                         system_prompt=chat_request.system_prompt,
                     ):
-                        response = StreamResponse(content=chunk, done=False)
+                        response = StreamResponse(content=chunk.content, done=False)
                         yield f"data: {response.model_dump_json()}\n\n"
 
                 # Send final message indicating completion
@@ -150,6 +155,8 @@ async def chat_stream(
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(
             "stream_chat_request_failed",
@@ -164,7 +171,7 @@ async def chat_stream(
 async def get_session_messages(
     request: Request,
     session: Session = Depends(get_current_session),
-    agent: LangGraphAgent = Depends(get_agent),
+    agent: LangGraphAgentInterface = Depends(get_default_agent),
 ):
     """Get all messages for a session.
 
@@ -191,7 +198,7 @@ async def get_session_messages(
 async def clear_chat_history(
     request: Request,
     session: Session = Depends(get_current_session),
-    agent: LangGraphAgent = Depends(get_agent),
+    agent: LangGraphAgentInterface = Depends(get_default_agent),
 ):
     """Clear all messages for a session.
 

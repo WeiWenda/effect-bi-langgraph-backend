@@ -41,6 +41,7 @@ from app.core.config import (
     Environment,
     settings,
 )
+from app.core.langgraph.agent_interface import LangGraphAgentInterface
 from app.core.langgraph.tools import tools
 from app.core.logging import logger
 from app.core.metrics import llm_inference_duration_seconds
@@ -49,7 +50,10 @@ from app.core.prompts import load_system_prompt
 from app.schemas import (
     GraphState,
     Message,
+    StreamChunk,
 )
+from app.utils.interrupt import extract_interrupt_text
+from app.utils.langchain_message import ai_message_content_to_str
 from app.services.llm import llm_service
 from app.services.memory import memory_service
 from app.utils import (
@@ -59,12 +63,14 @@ from app.utils import (
 )
 
 
-class LangGraphAgent:
+class LangGraphAgent(LangGraphAgentInterface):
     """LangGraph Agent class for managing AI workflows and LLM interactions.
 
     This class handles the creation and management of the LangGraph workflow,
     including LLM interactions, database connections, and response processing.
     """
+
+    agent_name = "default"
 
     def __init__(self):
         """Initialize the LangGraph Agent with necessary components."""
@@ -449,9 +455,11 @@ class LangGraphAgent:
             # Check if the graph was interrupted during this invocation
             state = await self._graph.aget_state(config)
             if state.next:
-                interrupt_value = state.tasks[0].interrupts[0].value if state.tasks else "Waiting for input."
-                logger.info("graph_interrupted", session_id=session_id, interrupt_value=str(interrupt_value))
-                return [Message(role="assistant", content=str(interrupt_value))]
+                interrupt_value = extract_interrupt_text(
+                    state.tasks[0].interrupts[0].value if state.tasks else None
+                )
+                logger.info("graph_interrupted", session_id=session_id, interrupt_value=interrupt_value)
+                return [Message(role="assistant", content=interrupt_value)]
 
             if settings.USE_LONG_TERM_MEMORY:
                 asyncio.create_task(
@@ -460,9 +468,11 @@ class LangGraphAgent:
             return self.__process_messages(response["messages"])
         except GraphInterrupt:
             state = await self._graph.aget_state(config)
-            interrupt_value = state.tasks[0].interrupts[0].value if state.tasks else "Waiting for input."
-            logger.info("graph_interrupted", session_id=session_id, interrupt_value=str(interrupt_value))
-            return [Message(role="assistant", content=str(interrupt_value))]
+            interrupt_value = extract_interrupt_text(
+                state.tasks[0].interrupts[0].value if state.tasks else None
+            )
+            logger.info("graph_interrupted", session_id=session_id, interrupt_value=interrupt_value)
+            return [Message(role="assistant", content=interrupt_value)]
         except Exception as e:
             logger.exception("get_response_failed", error=str(e), session_id=session_id)
             raise
@@ -474,7 +484,7 @@ class LangGraphAgent:
         user_id: Optional[str] = None,
         username: Optional[str] = None,
         system_prompt: Optional[str] = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[StreamChunk, None]:
         """Get a stream response from the LLM.
 
         Args:
@@ -485,7 +495,7 @@ class LangGraphAgent:
             system_prompt (Optional[str]): Custom system prompt to override the default.
 
         Yields:
-            str: Tokens of the LLM response.
+            StreamChunk: Tokens of the LLM response (including ask_human prompts as plain text).
         """
         callbacks = [langfuse_callback_handler] if settings.LANGFUSE_TRACING_ENABLED else []
         config = {
@@ -528,16 +538,18 @@ class LangGraphAgent:
                         if messages and len(messages) > 0:
                             last_message = messages[-1]
                             if isinstance(last_message, AIMessage):
-                                content = last_message.content
-                                if isinstance(content, str) and content:
-                                    yield content
+                                content = ai_message_content_to_str(last_message.content)
+                                if content:
+                                    yield StreamChunk(content=content)
 
             # After streaming completes, check for interrupt or update memory
             state = await self._graph.aget_state(config)
             if state.next:
-                interrupt_value = state.tasks[0].interrupts[0].value if state.tasks else "Waiting for input."
-                logger.info("graph_interrupted_stream", session_id=session_id, interrupt_value=str(interrupt_value))
-                yield str(interrupt_value)
+                interrupt_value = extract_interrupt_text(
+                    state.tasks[0].interrupts[0].value if state.tasks else None
+                )
+                logger.info("graph_interrupted_stream", session_id=session_id, interrupt_value=interrupt_value)
+                yield StreamChunk(content=interrupt_value)
             elif state.values and "messages" in state.values:
                 if settings.USE_LONG_TERM_MEMORY:
                     asyncio.create_task(
@@ -547,9 +559,11 @@ class LangGraphAgent:
                     )
         except GraphInterrupt:
             state = await self._graph.aget_state(config)
-            interrupt_value = state.tasks[0].interrupts[0].value if state.tasks else "Waiting for input."
-            logger.info("graph_interrupted_stream", session_id=session_id, interrupt_value=str(interrupt_value))
-            yield str(interrupt_value)
+            interrupt_value = extract_interrupt_text(
+                state.tasks[0].interrupts[0].value if state.tasks else None
+            )
+            logger.info("graph_interrupted_stream", session_id=session_id, interrupt_value=interrupt_value)
+            yield StreamChunk(content=interrupt_value)
         except Exception as stream_error:
             logger.exception("stream_processing_failed", error=str(stream_error), session_id=session_id)
             raise stream_error

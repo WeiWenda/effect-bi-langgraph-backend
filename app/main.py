@@ -22,7 +22,10 @@ from slowapi.errors import RateLimitExceeded
 from asgi_correlation_id import CorrelationIdMiddleware
 
 from app.api.v1.api import api_router
-from app.api.v1.chatbot import get_agent, _agent
+from app.core.langgraph.agent_factory import (
+    close_all_agents,
+    get_agent,
+)
 from app.core.cache import cache_service
 from app.core.config import settings
 from app.core.limiter import limiter
@@ -78,8 +81,7 @@ async def lifespan(app: FastAPI):
 
     # Cleanup on shutdown
     await cache_service.close()
-    if _agent:
-        await _agent.close()
+    await close_all_agents()
     logger.info("application_shutdown")
 
 
