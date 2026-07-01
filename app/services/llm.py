@@ -224,11 +224,12 @@ class LLMService:
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
-    async def _call_llm_with_retry(self, messages: List[BaseMessage]) -> BaseMessage:
+    async def _call_llm_with_retry(self, messages: List[BaseMessage], config: Optional[Dict] = None) -> BaseMessage:
         """Call the LLM with automatic retry logic.
 
         Args:
             messages: List of messages to send to the LLM
+            config: Optional RunnableConfig with callbacks/metadata for tracing
 
         Returns:
             BaseMessage response from the LLM
@@ -240,7 +241,7 @@ class LLMService:
             raise RuntimeError("llm not initialized")
 
         try:
-            response = await self._llm.ainvoke(messages)
+            response = await self._llm.ainvoke(messages, config=config)
             logger.debug("llm_call_successful", message_count=len(messages))
             return response
         except (RateLimitError, APITimeoutError, APIError) as e:
@@ -263,6 +264,7 @@ class LLMService:
         self,
         messages: List[BaseMessage],
         model_name: Optional[str] = None,
+        config: Optional[Dict] = None,
         **model_kwargs,
     ) -> BaseMessage:
         """Call the LLM with the specified messages and circular fallback.
@@ -270,6 +272,7 @@ class LLMService:
         Args:
             messages: List of messages to send to the LLM
             model_name: Optional specific model to use. If None, uses current model.
+            config: Optional RunnableConfig with callbacks/metadata for tracing
             **model_kwargs: Optional kwargs to override default model configuration
 
         Returns:
@@ -280,7 +283,7 @@ class LLMService:
         """
         try:
             return await asyncio.wait_for(
-                self._call_with_fallback(messages, model_name, **model_kwargs),
+                self._call_with_fallback(messages, model_name, config=config, **model_kwargs),
                 timeout=settings.LLM_TOTAL_TIMEOUT,
             )
         except asyncio.TimeoutError:
@@ -294,6 +297,7 @@ class LLMService:
         self,
         messages: List[BaseMessage],
         model_name: Optional[str] = None,
+        config: Optional[Dict] = None,
         **model_kwargs,
     ) -> BaseMessage:
         """Execute LLM call with circular model fallback."""
@@ -320,7 +324,7 @@ class LLMService:
 
         while models_tried < total_models:
             try:
-                response = await self._call_llm_with_retry(messages)
+                response = await self._call_llm_with_retry(messages, config=config)
                 return response
             except OpenAIError as e:
                 last_error = e

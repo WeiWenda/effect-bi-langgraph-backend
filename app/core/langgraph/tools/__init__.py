@@ -21,10 +21,10 @@ from .skill_exec import skill_exec_bash_cmd
 tools: list[BaseTool] = [
     # duckduckgo_search_tool,
     ask_human,
-    check_env_key,
-    skill_exec_bash_cmd,
-    search_clawhub_skills,
-    install_clawhub_skill,
-    load_clawhub_skill,
-    list_installed_clawhub_skills,
+    # check_env_key,
+    # skill_exec_bash_cmd,
+    # search_clawhub_skills,
+    # install_clawhub_skill,
+    # load_clawhub_skill,
+    # list_installed_clawhub_skills,
 ]

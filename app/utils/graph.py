@@ -6,7 +6,6 @@ from langchain_core.messages import trim_messages as _trim_messages
 
 from app.core.config import settings
 from app.core.logging import logger
-from app.schemas import Message
 
 # Cache tiktoken encoding at module level — thread-safe and reusable
 try:
@@ -39,16 +38,22 @@ def _count_tokens_tiktoken(messages: list) -> int:
     return num_tokens
 
 
-def dump_messages(messages: list[Message]) -> list[dict]:
+def dump_messages(messages: list) -> list[dict]:
     """Dump the messages to a list of dictionaries.
 
     Args:
-        messages (list[Message]): The messages to dump.
+        messages: The messages to dump (Message objects or dicts).
 
     Returns:
         list[dict]: The dumped messages.
     """
-    return [message.model_dump() for message in messages]
+    result = []
+    for message in messages:
+        if isinstance(message, dict):
+            result.append(message)
+        else:
+            result.append(message.model_dump())
+    return result
 
 
 def process_llm_response(response: BaseMessage) -> BaseMessage:
@@ -97,15 +102,16 @@ def process_llm_response(response: BaseMessage) -> BaseMessage:
     return response
 
 
-def prepare_messages(messages: list[Message], system_prompt: str) -> list[Message]:
+def prepare_messages(messages: list[BaseMessage], system_prompt: str) -> list[dict]:
     """Prepare the messages for the LLM.
 
     Args:
-        messages (list[Message]): The messages to prepare.
-        system_prompt (str): The system prompt to use.
+        messages: The messages to prepare (LangChain BaseMessage or Message).
+        system_prompt: The system prompt to use.
 
     Returns:
-        list[Message]: The prepared messages.
+        list[dict]: The prepared messages as dicts (role/content),
+            ready for LLM invocation.
     """
     try:
         # Check if there are tool calls in the messages to preserve context
@@ -116,16 +122,23 @@ def prepare_messages(messages: list[Message], system_prompt: str) -> list[Messag
         
         if has_tool_calls:
             # Preserve full context when there are tool calls
-            # Use a different trimming strategy that preserves more context
+            # Do NOT use start_on="human" here: in multi-round tool-call loops the
+            # only HumanMessage is at the very front and gets trimmed away first,
+            # causing the LLM to lose both user input and tool results.
             trimmed_messages = _trim_messages(
                 dump_messages(messages),
                 strategy="last",
                 token_counter=_count_tokens_tiktoken,
                 max_tokens=settings.MAX_TOKENS * 2,  # Double the limit for tool call scenarios
-                start_on="human",
                 include_system=False,
                 allow_partial=False,
             )
+            if not trimmed_messages:
+                logger.warning(
+                    "trim_returned_empty_for_tool_calls",
+                    message_count=len(messages),
+                )
+                trimmed_messages = dump_messages(messages)
         else:
             # Use normal trimming for regular conversations
             trimmed_messages = _trim_messages(
@@ -150,27 +163,4 @@ def prepare_messages(messages: list[Message], system_prompt: str) -> list[Messag
         else:
             raise
 
-    # Convert trimmed dict messages back to Message objects for consistency
-    message_objects = []
-    for msg_dict in trimmed_messages:
-        if isinstance(msg_dict, dict):
-            message_objects.append(Message(**msg_dict))
-        else:
-            message_objects.append(msg_dict)
-
-    # Append CLAWHUB skills instructions to system prompt
-    try:
-        from pathlib import Path
-        skillhub_md_path = Path(__file__).parent.parent / "core" / "prompts" / "skillhub.md"
-        if skillhub_md_path.exists():
-            with open(skillhub_md_path, "r", encoding="utf-8") as f:
-                clawhub_instructions = f.read().strip()
-        else:
-            clawhub_instructions = ""
-    except Exception as e:
-        logger.warning("failed_to_read_skillhub_md", error=str(e))
-        clawhub_instructions = ""
-
-    enhanced_system_prompt = system_prompt + clawhub_instructions
-
-    return [Message(role="system", content=enhanced_system_prompt)] + message_objects
+    return [{"role": "system", "content": system_prompt}] + list(trimmed_messages)

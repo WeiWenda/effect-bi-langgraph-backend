@@ -36,7 +36,7 @@ from app.schemas import Message, StreamChunk
 from app.utils.interrupt import extract_interrupt_text
 from app.utils.langchain_message import ai_message_content_to_str
 from app.schemas.find_resource import FindResourceGraphState
-from app.services.llm import LLMRegistry, llm_service
+from app.services.llm import LLMRegistry, LLMService
 from app.utils import dump_messages, process_llm_response
 
 # Nodes whose LLM output may be streamed to the client
@@ -141,7 +141,7 @@ class FindResourceLangGraphAgent(LangGraphAgentInterface):
     agent_name = "findResource"
 
     def __init__(self) -> None:
-        self.llm_service = llm_service
+        self.llm_service = LLMService()
         self._connection_pool: Optional[AsyncConnectionPool] = None
         self._graph: Optional[CompiledStateGraph] = None
         self.tools_by_name = {
@@ -200,7 +200,7 @@ class FindResourceLangGraphAgent(LangGraphAgentInterface):
             messages = [SystemMessage(content=system_prompt), *messages]
         model_name = settings.DEFAULT_LLM_MODEL
         with llm_inference_duration_seconds.labels(model=model_name).time():
-            response = await llm.ainvoke(messages)
+            response = await llm.ainvoke(messages, config=config)
         return process_llm_response(response)
 
     async def _run_tool_loop(

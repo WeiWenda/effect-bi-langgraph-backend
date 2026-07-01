@@ -32,8 +32,8 @@ from app.core.logging import logger
 from app.core.metrics import llm_inference_duration_seconds
 from app.core.observability import langfuse_callback_handler
 from app.schemas import GraphState, Message, StreamChunk
-from app.services.llm import llm_service
-from app.utils import dump_messages, process_llm_response
+from app.services.llm import LLMService
+from app.utils import dump_messages, prepare_messages, process_llm_response
 from app.utils.langchain_message import ai_message_content_to_str
 
 _GRAPHRAG_MCP_URL = os.getenv("GRAPHRAG_MCP_URL", "http://localhost:50425/mcp")
@@ -69,7 +69,7 @@ class NewsLangGraphAgent(LangGraphAgentInterface):
     agent_name = "news"
 
     def __init__(self) -> None:
-        self.llm_service = llm_service
+        self.llm_service = LLMService()
         self._local_tools = [ask_human]
         self._mcp_client: Optional[Client] = None
         self._mcp_tools: List = []
@@ -183,13 +183,10 @@ class NewsLangGraphAgent(LangGraphAgentInterface):
         username = config.get("metadata", {}).get("username")
         if username:
             system_prompt = f"# User\nYou are talking to {username}.\n\n{system_prompt}"
-        messages = [
-            {"role": "system", "content": system_prompt},
-            *[{"role": m.type if hasattr(m, "type") else "user", "content": m.content} for m in state.messages],
-        ]
+        messages = prepare_messages(state.messages, system_prompt)
         try:
             with llm_inference_duration_seconds.labels(model=model_name).time():
-                response_message = await self.llm_service.call(dump_messages(messages))
+                response_message = await self.llm_service.call(messages)
             response_message = process_llm_response(response_message)
             logger.info(
                 "news_llm_response_generated",

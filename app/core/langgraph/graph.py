@@ -54,7 +54,7 @@ from app.schemas import (
 )
 from app.utils.interrupt import extract_interrupt_text
 from app.utils.langchain_message import ai_message_content_to_str
-from app.services.llm import llm_service
+from app.services.llm import LLMService
 from app.services.memory import memory_service
 from app.utils import (
     dump_messages,
@@ -74,8 +74,8 @@ class LangGraphAgent(LangGraphAgentInterface):
 
     def __init__(self):
         """Initialize the LangGraph Agent with necessary components."""
-        # Use the LLM service with tools bound
-        self.llm_service = llm_service
+        # Use a dedicated LLM service instance so tool bindings are isolated per agent
+        self.llm_service = LLMService()
         self._local_tools = tools
         self._mcp_client: Optional[Client] = None
         self._mcp_tools: List = []
@@ -285,6 +285,14 @@ class LangGraphAgent(LangGraphAgentInterface):
             SYSTEM_PROMPT = state.custom_system_prompt
         else:
             SYSTEM_PROMPT = load_system_prompt(username=username, long_term_memory=state.long_term_memory)
+            try:
+                from pathlib import Path
+                skillhub_md_path = Path(__file__).parent.parent / "prompts" / "skillhub.md"
+                if skillhub_md_path.exists():
+                    with open(skillhub_md_path, "r", encoding="utf-8") as f:
+                        SYSTEM_PROMPT = SYSTEM_PROMPT + f.read().strip()
+            except Exception as e:
+                logger.warning("failed_to_read_skillhub_md", error=str(e))
 
         # Prepare messages with system prompt
         messages = prepare_messages(state.messages, SYSTEM_PROMPT)
