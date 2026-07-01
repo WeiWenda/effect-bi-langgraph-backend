@@ -9,6 +9,7 @@ from typing import (
 from app.core.langgraph.agent_interface import LangGraphAgentInterface
 from app.core.langgraph.find_resource_agent import FindResourceLangGraphAgent
 from app.core.langgraph.graph import LangGraphAgent
+from app.core.langgraph.news_agent import NewsLangGraphAgent
 from app.core.logging import logger
 
 DEFAULT_AGENT_NAME = "default"
@@ -16,6 +17,7 @@ DEFAULT_AGENT_NAME = "default"
 _AGENT_REGISTRY: Dict[str, Type[LangGraphAgentInterface]] = {
     LangGraphAgent.agent_name: LangGraphAgent,
     FindResourceLangGraphAgent.agent_name: FindResourceLangGraphAgent,
+    NewsLangGraphAgent.agent_name: NewsLangGraphAgent,
 }
 
 _agents: Dict[str, LangGraphAgentInterface] = {}
